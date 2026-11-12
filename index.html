@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Diario giornaliero</title>
 <!-- SETUP
-1. In CFG metti il CLIENT_ID (lo stesso client OAuth di "Accedi con Google") e l’URL /exec dello script (vedi Code.gs).
+1. In config.js (stesso repository) metti il CLIENT_ID (lo stesso client OAuth di "Accedi con Google") e l’URL /exec dello script (vedi Code.gs).
 2. Carica questo file come index.html su GitHub Pages.
 3. Nel client OAuth, tra le "Origini JavaScript autorizzate", deve esserci https://TUOUTENTE.github.io (se la web app precedente era sullo stesso github.io, c’è già).
 Senza accesso o senza rete i dati restano sul dispositivo e partono alla prima sincronizzazione riuscita. -->
@@ -29,6 +29,8 @@ button.s{background:transparent;color:var(--tx);border:1px solid var(--ln)}
 footer{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--ln);padding:8px 16px calc(10px + env(safe-area-inset-bottom))}
 footer>*{max-width:560px;margin:0 auto}#st{font-size:14px;color:var(--mu);min-height:20px}
 :focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+#lock{position:fixed;inset:0;z-index:9;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px}
+#lock[hidden]{display:none}#lock div{max-width:320px;width:100%;display:grid;gap:10px}#lm{color:var(--mu);font-size:14px;margin:0}
 nav{display:flex;gap:8px;margin-bottom:8px}nav button{flex:1}
 .k{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;margin:16px 0 4px;font-size:14px;font-weight:600}
 .k span{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:400;color:var(--mu)}
@@ -43,6 +45,7 @@ nav{display:flex;gap:8px;margin-bottom:8px}nav button{flex:1}
 <body>
 <main>
 <header><h1>Diario giornaliero</h1><div class="r"><span id="who">Non connesso</span><div id="gbtn"></div></div></header>
+<button id="bio" class="s" type="button" hidden style="margin-bottom:8px"></button>
 <nav><button id="tI" type="button">Inserimento</button><button id="tA" type="button" class="s">Andamento</button></nav>
 <div id="vIns">
 <section>
@@ -55,9 +58,10 @@ nav{display:flex;gap:8px;margin-bottom:8px}nav button{flex:1}
 <div id="vAnd" hidden></div>
 </main>
 <footer><div id="st"></div><div class="row"><button id="save">Salva</button><button id="sync" class="s">Sincronizza</button><button id="csv" class="s">Esporta CSV</button></div></footer>
+<div id="lock" hidden><div><h1>Diario bloccato</h1><button id="unl" type="button">Sblocca</button><button id="ug" class="s" type="button">Usa Google invece</button><p id="lm"></p></div></div>
+<script src="config.js"></script>
 <script src="https://accounts.google.com/gsi/client" async onload="initG()"></script>
 <script>
-const CFG={CLIENT_ID:'447117247795-qpi0o4fte930lbtk8jncvro31t3b25bm.apps.googleusercontent.com',SCRIPT_URL:'https://script.google.com/macros/s/AKfycbwiob1JWH7JcCD1zo-OnuVoHg3-YjO74bEw_Rdx7KRRZDlwVD9zXFLpq2PnOzrG_iT6OQ/exec'};
 const $=id=>document.getElementById(id);
 // k: n numero, t testo, x testo lungo, s menu, b casella, r scala 0-N
 const UI=[
@@ -120,27 +124,53 @@ $('csv').onclick=()=>{const d=all(),q=v=>'"'+String(v).replace(/"/g,'""')+'"';
  const rows=[['schema_version'].concat(COLS).map(q).join(',')].concat(Object.keys(d).sort().map(k=>[2].concat(COLS.map(c=>d[k][c]??'')).map(q).join(',')));
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+rows.join('\n')],{type:'text/csv'}));a.download='diario.csv';a.click()};
 
-// Accesso Google e sincronizzazione verso lo script collegato al foglio
-let tok=null;
-const exp=t=>{try{return JSON.parse(atob(t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).exp*1e3}catch(e){return 0}};
+// Accesso Google: l’account si verifica una volta, poi lo script rilascia una sessione di 30 giorni per questo dispositivo
+let bioOK=false,ses='';try{ses=localStorage.getItem('diario_ses')||''}catch(e){}
+const post=async o=>(await fetch(CFG.SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(o)})).json();
+const endSes=()=>{ses='';try{localStorage.removeItem('diario_ses')}catch(e){}who();bioUI()};
+function who(){$('who').textContent=ses?'Connesso (tocca per uscire)':'Non connesso';$('gbtn').hidden=!!ses}
+$('who').onclick=()=>{if(ses&&confirm('Disconnettere questo dispositivo?'))endSes()};
+async function login(cred){try{const j=await post({action:'login',token:cred});
+ if(j.ok){ses=j.session;try{localStorage.setItem('diario_ses',ses)}catch(e){}who();bioUI();sync()}else $('st').textContent='Accesso rifiutato: '+j.error}
+ catch(e){$('st').textContent='Accesso non riuscito ('+e.message+'). Controlla SCRIPT_URL'}}
 function initG(){
- google.accounts.id.initialize({client_id:CFG.CLIENT_ID,callback:r=>{tok=r.credential;$('who').textContent='Connesso';sync()},auto_select:true});
- google.accounts.id.renderButton($('gbtn'),{theme:'outline',size:'medium'});google.accounts.id.prompt()}
+ google.accounts.id.initialize({client_id:CFG.CLIENT_ID,callback:r=>login(r.credential),auto_select:true});
+ google.accounts.id.renderButton($('gbtn'),{theme:'outline',size:'medium'});if(!ses)google.accounts.id.prompt()}
 async function sync(){
- if(!tok||exp(tok)<Date.now()){tok=null;$('who').textContent='Non connesso';$('st').textContent='Accedi con Google per sincronizzare';return}
+ if(!ses){$('st').textContent='Accedi con Google per sincronizzare';return}
  const d=load();let n=0;
  for(const k in d){if(d[k].sent)continue;
-  try{const r=await fetch(CFG.SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({token:tok,row:d[k].row})}),j=await r.json();
-   if(j.ok){d[k].sent=true;n++}else{$('st').textContent='Rifiutato: '+j.error;break}}
-  catch(e){$('st').textContent='Rete non disponibile: dati tenuti sul dispositivo';break}}
+  try{const j=await post({session:ses,row:d[k].row});
+   if(j.ok){d[k].sent=true;n++}else{if(j.error=='sessione scaduta')endSes();$('st').textContent='Rifiutato: '+j.error;break}}
+  catch(e){$('st').textContent='Sincronizzazione non riuscita ('+e.message+'): dati tenuti sul dispositivo. Controlla SCRIPT_URL';break}}
  store(d);if(n)$('st').textContent=n+(n>1?' giorni sincronizzati':' giorno sincronizzato');await pull()}
 $('sync').onclick=sync;
 
 // Dati remoti (foglio) uniti a quelli locali non ancora inviati
 const rem=()=>{try{return JSON.parse(localStorage.getItem('diario_rem'))||{}}catch(e){return{}}};
 const all=()=>{const m=rem(),d=load();for(const k in d)if(!d[k].sent||!m[k])m[k]=d[k].row;return m};
-async function pull(){try{const r=await fetch(CFG.SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({token:tok,action:'list'})}),j=await r.json();
- if(j.ok){const m={};j.rows.forEach(x=>m[x.data]=x);localStorage.setItem('diario_rem',JSON.stringify(m));if(!$('vAnd').hidden)draw()}}catch(e){}}
+async function pull(){if(!ses)return;try{const j=await post({session:ses,action:'list'});
+ if(j.ok){const m={};j.rows.forEach(x=>m[x.data]=x);localStorage.setItem('diario_rem',JSON.stringify(m));if(!$('vAnd').hidden)draw()}
+ else if(j.error=='sessione scaduta')endSes()}catch(e){}}
+who();if(ses)sync();
+
+// Sblocco biometrico locale (facoltativo): chiede impronta o volto all’apertura dell’app su questo dispositivo.
+// Se il dispositivo non ha un sensore il pulsante non compare. Non sostituisce l’accesso Google.
+const b64=u=>btoa(String.fromCharCode(...new Uint8Array(u))),ub=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0)),rnd=()=>crypto.getRandomValues(new Uint8Array(32));
+let T=Date.now();
+async function bioInit(){try{bioOK=!!(window.PublicKeyCredential&&await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable())}catch(e){}bioUI()}
+function bioUI(){const b=$('bio');b.hidden=!(bioOK&&ses);b.textContent=localStorage.getItem('diario_bio')?'Sblocco biometrico attivo (tocca per disattivare)':'Attiva sblocco biometrico'}
+$('bio').onclick=async()=>{
+ if(localStorage.getItem('diario_bio')){localStorage.removeItem('diario_bio');bioUI();$('st').textContent='Sblocco biometrico disattivato';return}
+ try{const c=await navigator.credentials.create({publicKey:{challenge:rnd(),rp:{name:'Diario'},user:{id:rnd(),name:'diario',displayName:'Diario'},pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required'},timeout:60000}});
+  localStorage.setItem('diario_bio',b64(c.rawId));bioUI();$('st').textContent='Sblocco biometrico attivato'}
+ catch(e){$('st').textContent='Sblocco biometrico non attivato ('+(e.name||e.message)+')'}};
+function lockIf(){if(ses&&localStorage.getItem('diario_bio')){$('lm').textContent='';$('lock').hidden=false}}
+$('unl').onclick=async()=>{try{await navigator.credentials.get({publicKey:{challenge:rnd(),allowCredentials:[{type:'public-key',id:ub(localStorage.getItem('diario_bio'))}],userVerification:'required',timeout:60000}});$('lock').hidden=true;T=Date.now()}
+ catch(e){$('lm').textContent='Non riuscito ('+(e.name||e.message)+'). Riprova oppure usa Google'}};
+$('ug').onclick=()=>{localStorage.removeItem('diario_bio');endSes();$('lock').hidden=true};
+document.addEventListener('visibilitychange',()=>{if(document.hidden)T=Date.now();else if(Date.now()-T>3e5)lockIf()});
+bioInit();lockIf();
 
 // Andamento
 let per=30,selD=null,hid=new Set();
