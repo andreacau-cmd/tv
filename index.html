@@ -126,7 +126,7 @@ $('csv').onclick=()=>{const d=all(),q=v=>'"'+String(v).replace(/"/g,'""')+'"';
 
 // Accesso Google: l’account si verifica una volta, poi lo script rilascia una sessione di 30 giorni per questo dispositivo
 let bioOK=false,ses='';try{ses=localStorage.getItem('diario_ses')||''}catch(e){}
-const post=async o=>(await fetch(CFG.SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(o)})).json();
+const post=async o=>(await fetch(CFG.SCRIPT_URL+'?'+Object.keys(o).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(typeof o[k]=='object'?JSON.stringify(o[k]):o[k])).join('&'),{redirect:'follow'})).json();
 const endSes=()=>{ses='';try{localStorage.removeItem('diario_ses')}catch(e){}who();bioUI()};
 function who(){$('who').textContent=ses?'Connesso (tocca per uscire)':'Non connesso';$('gbtn').hidden=!!ses}
 $('who').onclick=()=>{if(ses&&confirm('Disconnettere questo dispositivo?'))endSes()};
