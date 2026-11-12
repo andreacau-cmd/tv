@@ -75,7 +75,7 @@ const UI=[
 ['Alimentazione',[['t','mattina','Mattina'],['t','pranzo','Pranzo'],['t','sera','Sera'],['t','spuntini','Spuntini (opzionale)']]],
 ['Meteo e note',[['n','sole_h','Ore di luce solare'],['x','note','Note libere']]]];
 const COLS=['data'].concat(UI.flatMap(s=>s[1].map(f=>f[1])));
-$('form').innerHTML='<section><h2>Data</h2><input type="date" id="data"></section>'+UI.map(([t,fs])=>'<section><h2>'+t+'</h2>'+fs.map(([k,id,l,x])=>{
+$('form').innerHTML='<section><h2>Data</h2><input type="date" id="data"><small id="dn" style="display:block;margin-top:6px;color:var(--mu)"></small></section>'+UI.map(([t,fs])=>'<section><h2>'+t+'</h2>'+fs.map(([k,id,l,x])=>{
  if(k=='n')return`<label for="${id}">${l}</label><input id="${id}" type="number" min="0" step="0.5" inputmode="decimal">`;
  if(k=='t')return`<label for="${id}">${l}</label><input id="${id}" type="text">`;
  if(k=='x')return`<label for="${id}">${l}</label><textarea id="${id}" rows="2"></textarea>`;
@@ -121,15 +121,20 @@ function row(){const r={};COLS.forEach(c=>{const e=$(c);r[c]=e.type=='checkbox'?
 function fill(r){COLS.forEach(c=>{const e=$(c);if(e.type=='checkbox')e.checked=!!+r[c];else e.value=r[c]??'';e.dispatchEvent(new Event('input'))})}
 $('save').onclick=()=>{const r=row();if(!/^\d{4}-\d{2}-\d{2}$/.test(r.data)){$('st').textContent='Inserisci la data';return}
  if(r.data>today()){$('st').textContent='Data nel futuro: controlla';return}
- const d=load();d[r.data]={row:r,sent:false};if(store(d)){$('st').textContent='Salvato sul dispositivo';sync()}};
-$('data').onchange=()=>{const x=all()[$('data').value];if(x)fill(x)};
+ const d=load();d[r.data]={row:r,sent:false};if(store(d)){$('st').textContent='Salvato sul dispositivo';dirty=false;$('dn').textContent='Giornata già presente: modifica solo i campi che vuoi e salva';sync()}};
+const ZERO=['tv_h','tablet_h','gocce_n','recugel','naviblef'];let dirty=false,filling=false;
+document.addEventListener('input',e=>{if(!filling&&e.target.closest&&e.target.closest('#form'))dirty=true});
+function resetForm(){COLS.forEach(c=>{if(c=='data')return;const e=$(c);if(e.type=='checkbox')e.checked=false;else e.value=ZERO.includes(c)?0:(e.type=='range'?0:'');e.dispatchEvent(new Event('input'))})}
+function loadDay(){filling=true;const r=all()[$('data').value];if(r)fill(r);else resetForm();filling=false;dirty=false;$('dn').textContent=r?'Giornata già presente: modifica solo i campi che vuoi e salva':''}
+$('data').onchange=loadDay;
 $('csv').onclick=()=>{const d=all(),q=v=>'"'+String(v).replace(/"/g,'""')+'"';
  const rows=[['schema_version'].concat(COLS).map(q).join(',')].concat(Object.keys(d).sort().map(k=>[2].concat(COLS.map(c=>d[k][c]??'')).map(q).join(',')));
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+rows.join('\n')],{type:'text/csv'}));a.download='diario.csv';a.click()};
 
 // Accesso Google: l’account si verifica una volta, poi lo script rilascia una sessione di 30 giorni per questo dispositivo
 let bioOK=false,ses='';try{ses=localStorage.getItem('diario_ses')||''}catch(e){}
-const post=async o=>(await fetch(CFG.SCRIPT_URL+'?'+Object.keys(o).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(typeof o[k]=='object'?JSON.stringify(o[k]):o[k])).join('&'),{redirect:'follow'})).json();
+async function post(o){const u=CFG.SCRIPT_URL+'?'+Object.keys(o).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(typeof o[k]=='object'?JSON.stringify(o[k]):o[k])).join('&');
+ for(let i=0;;i++){try{return await(await fetch(u,{redirect:'follow'})).json()}catch(e){if(i>=2)throw e;await new Promise(r=>setTimeout(r,1200*(i+1)))}}}
 const endSes=()=>{ses='';try{localStorage.removeItem('diario_ses')}catch(e){}who();bioUI()};
 function who(){$('who').textContent=ses?'Connesso (tocca per uscire)':'Non connesso';$('gbtn').hidden=!!ses}
 $('who').onclick=()=>{if(ses&&confirm('Disconnettere questo dispositivo?'))endSes()};
@@ -139,7 +144,9 @@ async function login(cred){try{const j=await post({action:'login',token:cred});
 function initG(){
  google.accounts.id.initialize({client_id:CFG.CLIENT_ID,callback:r=>login(r.credential),auto_select:true});
  google.accounts.id.renderButton($('gbtn'),{theme:'outline',size:'medium'});if(!ses)google.accounts.id.prompt()}
-async function sync(){
+let busy=0;
+async function sync(){if(busy)return;busy=1;try{await syncRun()}finally{busy=0}}
+async function syncRun(){
  if(!ses){$('st').textContent='Accedi con Google per sincronizzare';return}
  const d=load();let n=0;
  for(const k in d){if(d[k].sent)continue;
@@ -153,7 +160,7 @@ $('sync').onclick=sync;
 const rem=()=>{try{return JSON.parse(localStorage.getItem('diario_rem'))||{}}catch(e){return{}}};
 const all=()=>{const m=rem(),d=load();for(const k in d)if(!d[k].sent||!m[k])m[k]=d[k].row;return m};
 async function pull(){if(!ses)return;try{const j=await post({session:ses,action:'list'});
- if(j.ok){const m={};j.rows.forEach(x=>m[x.data]=x);localStorage.setItem('diario_rem',JSON.stringify(m));if(!$('vAnd').hidden)draw()}
+ if(j.ok){const m={};j.rows.forEach(x=>m[x.data]=x);localStorage.setItem('diario_rem',JSON.stringify(m));if(!dirty)loadDay();if(!$('vAnd').hidden)draw()}
  else if(j.error=='sessione scaduta')endSes()}catch(e){}}
 who();if(ses)sync();
 
@@ -173,7 +180,7 @@ $('unl').onclick=async()=>{try{await navigator.credentials.get({publicKey:{chall
  catch(e){$('lm').textContent='Non riuscito ('+(e.name||e.message)+'). Riprova oppure usa Google'}};
 $('ug').onclick=()=>{localStorage.removeItem('diario_bio');endSes();$('lock').hidden=true};
 document.addEventListener('visibilitychange',()=>{if(document.hidden)T=Date.now();else if(Date.now()-T>3e5)lockIf()});
-bioInit();lockIf();
+bioInit();lockIf();loadDay();
 
 // Andamento
 let per=30,selD=null,hid=new Set();
