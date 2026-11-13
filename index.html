@@ -57,6 +57,7 @@ nav{display:flex;gap:8px;margin-bottom:8px}nav button{flex:1}
 <div class="row"><button id="mic" class="s" type="button">Detta</button><button id="go" class="s" type="button">Compila i campi</button></div>
 </section>
 <div id="form"></div>
+<details class="mn"><summary>Diagnostica connessione</summary><div class="row"><button id="dg" type="button" class="s">Esegui test</button></div><pre id="dgo" style="white-space:pre-wrap;font-size:13px"></pre></details>
 </div>
 <div id="vAnd" hidden></div>
 </main>
@@ -133,8 +134,15 @@ $('csv').onclick=()=>{const d=all(),q=v=>'"'+String(v).replace(/"/g,'""')+'"';
 
 // Accesso Google: l’account si verifica una volta, poi lo script rilascia una sessione di 30 giorni per questo dispositivo
 let bioOK=false,ses='';try{ses=localStorage.getItem('diario_ses')||''}catch(e){}
-async function post(o){const u=CFG.SCRIPT_URL+'?'+Object.keys(o).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(typeof o[k]=='object'?JSON.stringify(o[k]):o[k])).join('&');
- for(let i=0;;i++){try{return await(await fetch(u,{redirect:'follow'})).json()}catch(e){if(i>=2)throw e;await new Promise(r=>setTimeout(r,1200*(i+1)))}}}
+const qs=o=>Object.keys(o).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(typeof o[k]=='object'?JSON.stringify(o[k]):o[k])).join('&');
+// Metodo alternativo (JSONP) se la lettura diretta viene bloccata dal browser
+function jsonp(u){return new Promise((res,rej)=>{const cb='cb'+Date.now()+Math.floor(Math.random()*1e6),el=document.createElement('script');
+ const done=()=>{clearTimeout(t);delete window[cb];el.remove()},t=setTimeout(()=>{done();rej(new Error('timeout'))},20000);
+ window[cb]=d=>{done();res(d)};el.onerror=()=>{done();rej(new Error('risposta non valida'))};
+ el.src=u+(u.includes('?')?'&':'?')+'callback='+cb;document.head.appendChild(el)})}
+async function post(o){const u=CFG.SCRIPT_URL+'?'+qs(o);
+ try{return await(await fetch(u,{redirect:'follow'})).json()}
+ catch(e1){try{return await jsonp(u)}catch(e2){throw new Error(e1.message+'; alternativa: '+e2.message)}}}
 const endSes=()=>{ses='';try{localStorage.removeItem('diario_ses')}catch(e){}who();bioUI()};
 function who(){$('who').textContent=ses?'Connesso (tocca per uscire)':'Non connesso';$('gbtn').hidden=!!ses}
 $('who').onclick=()=>{if(ses&&confirm('Disconnettere questo dispositivo?'))endSes()};
@@ -180,6 +188,13 @@ $('unl').onclick=async()=>{try{await navigator.credentials.get({publicKey:{chall
  catch(e){$('lm').textContent='Non riuscito ('+(e.name||e.message)+'). Riprova oppure usa Google'}};
 $('ug').onclick=()=>{localStorage.removeItem('diario_bio');endSes();$('lock').hidden=true};
 document.addEventListener('visibilitychange',()=>{if(document.hidden)T=Date.now();else if(Date.now()-T>3e5)lockIf()});
+$('dg').onclick=async()=>{const o=$('dgo'),U=CFG.SCRIPT_URL||'',L=[],p=()=>o.textContent=L.join('\n');
+ L.push('Indirizzo: '+(U.startsWith('https://script.google.com/macros/s/')?'forma ok':'forma NON valida')+', '+(U.endsWith('/exec')?'finale /exec ok':'NON finisce con /exec')+', lunghezza '+U.length);L.push('Sessione: '+(ses?'presente':'assente'));p();
+ try{const r=await fetch(U+'?t='+Date.now());L.push('1 lettura diretta: HTTP '+r.status+' '+JSON.stringify(await r.json()))}catch(e){L.push('1 lettura diretta: ERRORE '+e.message)}p();
+ try{await fetch(U+'?t='+Date.now(),{mode:'no-cors'});L.push('2 raggiungibile (senza lettura): sì')}catch(e){L.push('2 raggiungibile: NO ('+e.message+')')}p();
+ try{L.push('3 metodo alternativo: '+JSON.stringify(await jsonp(U+'?t='+Date.now())))}catch(e){L.push('3 metodo alternativo: ERRORE '+e.message)}p();
+ if(ses){try{L.push('4 sessione: '+JSON.stringify(await post({session:ses,action:'list'})).slice(0,90))}catch(e){L.push('4 sessione: ERRORE '+e.message)}p()}
+ L.push('Fine');p()};
 bioInit();lockIf();loadDay();
 
 // Andamento
