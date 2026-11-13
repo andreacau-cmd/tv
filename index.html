@@ -135,6 +135,7 @@ $('csv').onclick=()=>{const d=all(),q=v=>'"'+String(v).replace(/"/g,'""')+'"';
 // Accesso Google: l’account si verifica una volta, poi lo script rilascia una sessione di 30 giorni per questo dispositivo
 let bioOK=false,ses='';try{ses=localStorage.getItem('diario_ses')||''}catch(e){}
 const qs=o=>Object.keys(o).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(typeof o[k]=='object'?JSON.stringify(o[k]):o[k])).join('&');
+const compact=r=>Object.fromEntries(Object.entries(r).filter(([k,v])=>v!==''&&v!=null));
 // Metodo alternativo (JSONP) se la lettura diretta viene bloccata dal browser
 function jsonp(u){return new Promise((res,rej)=>{const cb='cb'+Date.now()+Math.floor(Math.random()*1e6),el=document.createElement('script');
  const done=()=>{clearTimeout(t);delete window[cb];el.remove()},t=setTimeout(()=>{done();rej(new Error('timeout'))},20000);
@@ -158,9 +159,9 @@ async function syncRun(){
  if(!ses){$('st').textContent='Accedi con Google per sincronizzare';return}
  const d=load();let n=0;
  for(const k in d){if(d[k].sent)continue;
-  try{const j=await post({session:ses,row:d[k].row});
+  try{const j=await post({session:ses,row:compact(d[k].row)});
    if(j.ok){d[k].sent=true;n++}else{if(j.error=='sessione scaduta')endSes();$('st').textContent='Rifiutato: '+j.error;break}}
-  catch(e){$('st').textContent='Sincronizzazione non riuscita ('+e.message+'): dati tenuti sul dispositivo. Controlla SCRIPT_URL';break}}
+  catch(e){$('st').textContent='Sincronizzazione non riuscita ('+e.message+'; richiesta di '+(CFG.SCRIPT_URL+'?'+qs({session:ses,row:compact(d[k].row)})).length+' caratteri): dati tenuti sul dispositivo';break}}
  store(d);if(n)$('st').textContent=n+(n>1?' giorni sincronizzati':' giorno sincronizzato');await pull()}
 $('sync').onclick=sync;
 
@@ -194,6 +195,8 @@ $('dg').onclick=async()=>{const o=$('dgo'),U=CFG.SCRIPT_URL||'',L=[],p=()=>o.tex
  try{await fetch(U+'?t='+Date.now(),{mode:'no-cors'});L.push('2 raggiungibile (senza lettura): sì')}catch(e){L.push('2 raggiungibile: NO ('+e.message+')')}p();
  try{L.push('3 metodo alternativo: '+JSON.stringify(await jsonp(U+'?t='+Date.now())))}catch(e){L.push('3 metodo alternativo: ERRORE '+e.message)}p();
  if(ses){try{L.push('4 sessione: '+JSON.stringify(await post({session:ses,action:'list'})).slice(0,90))}catch(e){L.push('4 sessione: ERRORE '+e.message)}p()}
+ {const d=load();let mx=0;for(const k in d)if(!d[k].sent)mx=Math.max(mx,(U+'?'+qs({session:ses||'',row:compact(d[k].row)})).length);L.push('Riga in attesa: richiesta di '+mx+' caratteri');p()}
+ if(ses)for(const n of [800,1800,2600,4000]){const len=(U+'?'+qs({session:ses,action:'list',pad:'x'.repeat(n)})).length;try{const j=await post({session:ses,action:'list',pad:'x'.repeat(n)});L.push('5 richiesta di '+len+' caratteri: '+(j.ok?'ok':JSON.stringify(j).slice(0,60)))}catch(e){L.push('5 richiesta di '+len+' caratteri: ERRORE')}p()}
  L.push('Fine');p()};
 bioInit();lockIf();loadDay();
 
