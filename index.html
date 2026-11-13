@@ -134,16 +134,17 @@ $('csv').onclick=()=>{const d=all(),q=v=>'"'+String(v).replace(/"/g,'""')+'"';
 
 // Accesso Google: l’account si verifica una volta, poi lo script rilascia una sessione di 30 giorni per questo dispositivo
 let bioOK=false,ses='';try{ses=localStorage.getItem('diario_ses')||''}catch(e){}
-const qs=o=>Object.keys(o).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(typeof o[k]=='object'?JSON.stringify(o[k]):o[k])).join('&');
+const qs=o=>Object.keys(o).flatMap(k=>k=='row'&&o[k]&&typeof o[k]=='object'?Object.entries(o[k]).map(([c,v])=>['f_'+c,v]):[[k,o[k]]]).map(([k,v])=>encodeURIComponent(k)+'='+encodeURIComponent(v)).join('&');
 const compact=r=>Object.fromEntries(Object.entries(r).filter(([k,v])=>v!==''&&v!=null));
 // Metodo alternativo (JSONP) se la lettura diretta viene bloccata dal browser
 function jsonp(u){return new Promise((res,rej)=>{const cb='cb'+Date.now()+Math.floor(Math.random()*1e6),el=document.createElement('script');
  const done=()=>{clearTimeout(t);delete window[cb];el.remove()},t=setTimeout(()=>{done();rej(new Error('timeout'))},20000);
  window[cb]=d=>{done();res(d)};el.onerror=()=>{done();rej(new Error('risposta non valida'))};
  el.src=u+(u.includes('?')?'&':'?')+'callback='+cb;document.head.appendChild(el)})}
-async function post(o){const u=CFG.SCRIPT_URL+'?'+qs(o);
+async function get(u){
  try{return await(await fetch(u,{redirect:'follow'})).json()}
  catch(e1){try{return await jsonp(u)}catch(e2){throw new Error(e1.message+'; alternativa: '+e2.message)}}}
+const post=o=>get(CFG.SCRIPT_URL+'?'+qs(o));
 const endSes=()=>{ses='';try{localStorage.removeItem('diario_ses')}catch(e){}who();bioUI()};
 function who(){$('who').textContent=ses?'Connesso (tocca per uscire)':'Non connesso';$('gbtn').hidden=!!ses}
 $('who').onclick=()=>{if(ses&&confirm('Disconnettere questo dispositivo?'))endSes()};
@@ -197,6 +198,10 @@ $('dg').onclick=async()=>{const o=$('dgo'),U=CFG.SCRIPT_URL||'',L=[],p=()=>o.tex
  if(ses){try{L.push('4 sessione: '+JSON.stringify(await post({session:ses,action:'list'})).slice(0,90))}catch(e){L.push('4 sessione: ERRORE '+e.message)}p()}
  {const d=load();let mx=0;for(const k in d)if(!d[k].sent)mx=Math.max(mx,(U+'?'+qs({session:ses||'',row:compact(d[k].row)})).length);L.push('Riga in attesa: richiesta di '+mx+' caratteri');p()}
  if(ses)for(const n of [800,1800,2600,4000]){const len=(U+'?'+qs({session:ses,action:'list',pad:'x'.repeat(n)})).length;try{const j=await post({session:ses,action:'list',pad:'x'.repeat(n)});L.push('5 richiesta di '+len+' caratteri: '+(j.ok?'ok':JSON.stringify(j).slice(0,60)))}catch(e){L.push('5 richiesta di '+len+' caratteri: ERRORE')}p()}
+ if(ses){const rr=Object.values(load()).find(x=>!x.sent),R=compact(rr?rr.row:{data:'2026-01-01',sonno_ore:'1',pranzo:'pasta al pomodoro'});
+  const t=async(nm,u)=>{try{const j=await get(u);L.push(nm+': '+(j.ok?'ok':JSON.stringify(j).slice(0,60)))}catch(e){L.push(nm+': ERRORE')}p()};
+  await t('6 riga come testo JSON (solo lettura)',U+'?session='+ses+'&action=list&row='+encodeURIComponent(JSON.stringify(R)));
+  await t('7 riga a campi separati (solo lettura)',U+'?'+qs({session:ses,action:'list',row:R}))}
  L.push('Fine');p()};
 bioInit();lockIf();loadDay();
 
