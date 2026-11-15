@@ -37,6 +37,8 @@ nav{display:flex;gap:8px;margin-bottom:8px}nav button{flex:1}
 .k span{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:400;color:var(--mu)}
 .lg{width:auto;min-height:34px;padding:2px 10px;border:1px solid var(--ac);border-radius:17px;background:transparent;color:var(--tx);font-weight:400;font-size:12px;display:inline-flex;align-items:center;gap:6px}
 .lg.off{opacity:.5;border-color:var(--ln);text-decoration:line-through}
+.tb{width:100%;border-collapse:collapse;font-size:12px}.tb th,.tb td{padding:5px 6px;border-bottom:1px solid var(--ln);text-align:right;white-space:nowrap}.tb th:first-child,.tb td:first-child{text-align:left;white-space:normal}.tb td.hi{font-weight:700;color:var(--ac)}.tb th{color:var(--mu);font-weight:400}
+.ep p{font-size:13px;margin:8px 0}.ep small{color:var(--mu)}
 .mn{margin:12px 0}
 .mn summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;border:1px solid var(--ac);border-radius:8px;list-style:none}
 .mn summary::-webkit-details-marker{display:none}.mn summary::after{content:'▾';font-size:18px}.mn[open] summary::after{content:'▴'}
@@ -208,7 +210,7 @@ $('dg').onclick=async()=>{const o=$('dgo'),U=CFG.SCRIPT_URL||'',L=[],p=()=>o.tex
 bioInit();lockIf();loadDay();
 
 // Andamento
-let per=30,selD=null,hid=new Set();
+let per=30,selD=null,epTxt='',hid=new Set();
 try{hid=new Set(JSON.parse(localStorage.getItem('diario_hid')||'[]'))}catch(e){}
 const on=k=>!hid.has(k),sv=()=>{try{localStorage.setItem('diario_hid',JSON.stringify([...hid]))}catch(e){}};
 const pd=s=>{const[y,m,d]=s.split('-').map(Number);return new Date(Date.UTC(y,m-1,d))};
@@ -220,7 +222,7 @@ const GR=[['Sintomi',[['occhio_dx','Occhio destro'],['occhio_sx','Occhio sinistr
 const view=v=>{$('vIns').hidden=v!='I';$('vAnd').hidden=v!='A';$('save').hidden=v!='I';$('tI').className=v=='I'?'':'s';$('tA').className=v=='A'?'':'s';if(v=='A')draw()};
 $('tI').onclick=()=>view('I');$('tA').onclick=()=>view('A');
 function draw(){
- const open=$('mn')&&$('mn').open,R=all(),n=per,W=640,PL=26,PR=6,bw=(W-PL-PR)/n,X=i=>PL+bw*i+bw/2,tw=Math.max(3,Math.min(24,bw*.8));
+ const open=$('mn')&&$('mn').open,epOpen=$('ep')&&$('ep').open,R=all(),n=per,W=640,PL=26,PR=6,bw=(W-PL-PR)/n,X=i=>PL+bw*i+bw/2,tw=Math.max(3,Math.min(24,bw*.8));
  const days=Array.from({length:n},(_,i)=>add(today(),i-n+1)),g=(i,k)=>{const r=R[days[i]];return r?nv(r[k]):null};
  const line=(a,k,col,dash)=>{let s='',pen=0;days.forEach((_,i)=>{const v=g(i,k);if(v===null){pen=0;return}s+=(pen?'L':'M')+X(i)+' '+a(v);pen=1});return`<path d="${s}" fill="none" style="stroke:${col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="${dash}"/>`};
  const bar=(a,i,k,col,x0,w)=>{const v=g(i,k);return v?`<rect x="${X(i)+x0}" y="${a(v)}" width="${w}" height="${a(0)-a(v)}" rx="2" style="fill:${col}"/>`:''};
@@ -240,7 +242,7 @@ function draw(){
  const sw=l=>l[2]=='l'?`<svg width="18" height="8" aria-hidden="true"><line x1="0" x2="18" y1="4" y2="4" style="stroke:${l[1]}" stroke-width="2" stroke-dasharray="${l[3]||''}"/></svg>`:l[2]=='d'?`<i style="width:8px;height:8px;border-radius:50%;background:${l[1]}"></i>`:`<i style="width:10px;height:10px;border-radius:2px;background:${l[1]}"></i>`;
  const have=days.some(d=>R[d]),hn=hid.size;
  const mn=`<details id="mn" class="mn"${open?' open':''}><summary>Cosa mostrare${hn?' ('+hn+' nascosti)':''}</summary>${GR.map(([t,ks])=>`<h3>${t}</h3><div class="g2">${ks.map(([k,l])=>`<label class="c"><input type="checkbox" data-k="${k}"${on(k)?' checked':''}>${l}</label>`).join('')}</div>`).join('')}<div class="row"><button type="button" class="s" data-all="1">Mostra tutto</button></div></details>`;
- $('vAnd').innerHTML=`<div class="row pd">${[5,10,14,30,90,180].map(v=>`<button type="button" data-p="${v}" class="${v==per?'':'s'}">${v} gg</button>`).join('')}</div>`+mn+(have?'':'<p class="k">Nessun dato in questo periodo</p>')+(P.length?'':'<p class="k">Nessuna serie selezionata</p>')+P.map((p,k)=>`<div class="k">${p.t}${p.L.map(l=>`<button type="button" class="lg${on(l[4])?'':' off'}" data-k="${l[4]}" aria-pressed="${on(l[4])}">${sw(l)}${l[0]}</button>`).join('')}</div>${p.ok?`<svg class="sv" id="p${k}" viewBox="0 0 ${W} 108" role="img" aria-label="${p.a}"></svg>`:'<p class="k" style="font-weight:400;color:var(--mu);margin:6px 0">Tutte le voci sono nascoste: tocca una voce per riattivarla</p>'}`).join('')+'<svg class="sv" id="ax" viewBox="0 0 640 18" aria-hidden="true"></svg><div id="det"></div>';
+ $('vAnd').innerHTML=`<div class="row pd">${[5,10,14,30,90,180].map(v=>`<button type="button" data-p="${v}" class="${v==per?'':'s'}">${v} gg</button>`).join('')}</div>`+mn+(have?'':'<p class="k">Nessun dato in questo periodo</p>')+(P.length?'':'<p class="k">Nessuna serie selezionata</p>')+P.map((p,k)=>`<div class="k">${p.t}${p.L.map(l=>`<button type="button" class="lg${on(l[4])?'':' off'}" data-k="${l[4]}" aria-pressed="${on(l[4])}">${sw(l)}${l[0]}</button>`).join('')}</div>${p.ok?`<svg class="sv" id="p${k}" viewBox="0 0 ${W} 108" role="img" aria-label="${p.a}"></svg>`:'<p class="k" style="font-weight:400;color:var(--mu);margin:6px 0">Tutte le voci sono nascoste: tocca una voce per riattivarla</p>'}`).join('')+'<svg class="sv" id="ax" viewBox="0 0 640 18" aria-hidden="true"></svg><div id="det"></div><details id="ep" class="mn ep"'+(epOpen?' open':'')+'><summary>Cosa è cambiato nei giorni prima</summary><div id="epb"></div></details>';
  P.forEach((p,k)=>{if(!p.ok)return;const T=6,B=100,a=v=>B-(B-T)*v/p.max;let s='';
   for(let v=0;v<=p.max+1e-9;v+=p.st)s+=`<line x1="${PL}" x2="${W-PR}" y1="${a(v)}" y2="${a(v)}" style="stroke:var(--ln)" stroke-width="0.5"/><text x="${PL-5}" y="${a(v)+4}" text-anchor="end" font-size="11" style="fill:var(--mu)">${Math.round(v*10)/10}</text>`;
   s+=`<rect class="hl" y="0" height="108" width="${bw}" style="fill:var(--tx)" opacity="0.07"/>`+p.d(a);
@@ -248,10 +250,27 @@ function draw(){
   $('p'+k).innerHTML=s});
  const st=n<=14?1:n<=30?3:n<=90?10:20;
  $('ax').innerHTML=days.map((d,i)=>(n-1-i)%st?'':`<text x="${X(i)}" y="13" text-anchor="middle" font-size="11" style="fill:var(--mu)">${n>30?+d.slice(8)+'/'+ +d.slice(5,7):+d.slice(8)}</text>`).join('');
+ const epi=()=>{const D=selD,lag=n=>add(D,-n),dm=d=>+d.slice(8)+'/'+ +d.slice(5,7);
+  const val=(day,k)=>{const r=R[day];if(!r)return null;
+   if(k=='tot'){const a=['pc_h','cellulare_h','tablet_h','tv_h'].map(c=>nv(r[c])).filter(v=>v!==null);return a.length?a.reduce((x,y)=>x+y,0):null}
+   if(k=='ind'){const a=['occhio_dx','occhio_sx','fotofobia','blefarite'].map(c=>nv(r[c])).filter(v=>v!==null);return a.length?a.reduce((x,y)=>x+y,0)/a.length:null}
+   return nv(r[k])};
+  const f=v=>v===null?'–':String(Math.round(v*10)/10),mean=a=>a.reduce((x,y)=>x+y,0)/a.length;
+  const VS=[['ind','Indice sintomi (media 0–5)'],['tot','Schermi totali (h)'],['pc_h','PC (h)'],['cellulare_h','Cellulare (h)'],['tablet_h','Tablet (h)'],['tv_h','TV (h)'],['pc_sera_buio','PC serale al buio'],['sonno_ore','Sonno (h)'],['sole_h','Sole (h)'],['naviblef','Naviblef'],['recugel','Recugel'],['gocce_n','Gocce'],['antistaminico','Antistaminico']];
+  const cols=[3,2,1,0];let rows='',txt='Giorno analizzato: '+D+'\nConfronto: valori dei 3 giorni precedenti, del giorno stesso e media dei giorni da D-10 a D-4 (N = giorni con dato). Scale: sintomi 0-5, vuoto = non registrato.\nVariabile | D-3 | D-2 | D-1 | D | media base (N)\n';
+  VS.forEach(([k,l])=>{const b=[];for(let n=4;n<=10;n++){const v=val(lag(n),k);if(v!==null)b.push(v)}
+   const m=b.length?mean(b):null,sd=b.length>=3?Math.sqrt(mean(b.map(v=>(v-m)**2))):null;
+   const cells=cols.map(n=>{const v=val(lag(n),k),hi=n>0&&v!==null&&sd!==null&&Math.abs(v-m)>=Math.max(sd,.5);return{v,hi}});
+   rows+=`<tr><td>${l}</td>${cells.map(c=>`<td${c.hi?' class="hi"':''}>${f(c.v)}${c.hi?(c.v>m?' ▲':' ▼'):''}</td>`).join('')}<td>${f(m)} <small>(${b.length})</small></td></tr>`;
+   txt+=l+' | '+cells.map(c=>f(c.v)+(c.hi?(c.v>m?' ▲':' ▼'):'')).join(' | ')+' | '+f(m)+' ('+b.length+')\n'});
+  let t='';for(let n=3;n>=0;n--){const r=R[lag(n)];if(!r)continue;const p=['mattina','pranzo','sera','spuntini','note'].filter(c=>r[c]!==undefined&&r[c]!=='').map(c=>c+': '+r[c]);if(p.length){t+=`<p><b>${dm(lag(n))}</b> ${esc(p.join(' · '))}</p>`;txt+='\nTesti '+lag(n)+': '+p.join(' · ')}}
+  epTxt=txt+'\n\nNota: confronto su un solo episodio, indica cosa è diverso e non cosa è la causa.';
+  $('epb').innerHTML=`<p><small>Giorno scelto: ${dm(D)}. I valori in grassetto con ▲ o ▼ si discostano dalla media dei giorni da D-10 a D-4 per più di una deviazione standard (serve almeno 3 giorni di confronto, tra parentesi il numero). È un confronto su un solo episodio: mostra cosa è diverso, non cosa è la causa.</small></p><div style="overflow-x:auto"><table class="tb"><tr><th></th><th>D-3</th><th>D-2</th><th>D-1</th><th>Giorno</th><th>Base</th></tr>${rows}</table></div>${t?'<p><b>Pasti e note</b></p>'+t:''}<div class="row"><button type="button" class="s" data-cp="1">Copia riepilogo per l’AI</button></div>`};
  const sel=i=>{selD=days[i];document.querySelectorAll('.hl').forEach(r=>r.setAttribute('x',PL+bw*i));
   const r=R[selD]||{},v=k=>r[k]!==undefined&&r[k]!==''?esc(r[k]):'–',f=(l,x)=>`<div><b>${l}</b>${x}</div>`,t=pd(selD).toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',timeZone:'UTC'});
-  $('det').innerHTML=`<div style="grid-column:1/-1;font-weight:600;font-size:15px">${t[0].toUpperCase()+t.slice(1)}</div>`+(R[selD]?f('Sonno',v('sonno_ore')+' h, '+v('sonno_qualita'))+f('Schermi',`PC ${v('pc_h')}, cell. ${v('cellulare_h')}, TV ${v('tv_h')}, tablet ${v('tablet_h')} (h)`)+f('PC serale al buio',+r.pc_sera_buio?'sì':'no')+f('Sintomi',`dx ${v('occhio_dx')}, sx ${v('occhio_sx')}, fotofobia ${v('fotofobia')}, blefarite ${v('blefarite')}, psoriasi ${v('psoriasi')}`)+f('Prodotti',`Naviblef ${v('naviblef')}, Recugel ${v('recugel')}, gocce ${v('gocce_n')}, antistaminico ${+r.antistaminico?'sì':'no'}, altro ${v('altro_prodotto')}`)+f('Luce solare',v('sole_h')+' h')+f('Mattina',v('mattina'))+f('Pranzo',v('pranzo'))+f('Sera',v('sera'))+f('Spuntini',v('spuntini'))+f('Note',v('note')):'<div>Nessun dato per questo giorno</div>')};
- $('vAnd').onclick=e=>{const t=e.target.closest&&e.target.closest('[data-p],[data-all],[data-k],[data-i]')||e.target,ga=a=>t.getAttribute&&t.getAttribute(a);
+  $('det').innerHTML=`<div style="grid-column:1/-1;font-weight:600;font-size:15px">${t[0].toUpperCase()+t.slice(1)}</div>`+(R[selD]?f('Sonno',v('sonno_ore')+' h, '+v('sonno_qualita'))+f('Schermi',`PC ${v('pc_h')}, cell. ${v('cellulare_h')}, TV ${v('tv_h')}, tablet ${v('tablet_h')} (h)`)+f('PC serale al buio',+r.pc_sera_buio?'sì':'no')+f('Sintomi',`dx ${v('occhio_dx')}, sx ${v('occhio_sx')}, fotofobia ${v('fotofobia')}, blefarite ${v('blefarite')}, psoriasi ${v('psoriasi')}`)+f('Prodotti',`Naviblef ${v('naviblef')}, Recugel ${v('recugel')}, gocce ${v('gocce_n')}, antistaminico ${+r.antistaminico?'sì':'no'}, altro ${v('altro_prodotto')}`)+f('Luce solare',v('sole_h')+' h')+f('Mattina',v('mattina'))+f('Pranzo',v('pranzo'))+f('Sera',v('sera'))+f('Spuntini',v('spuntini'))+f('Note',v('note')):'<div>Nessun dato per questo giorno</div>');epi()};
+ $('vAnd').onclick=e=>{const t=e.target.closest&&e.target.closest('[data-p],[data-all],[data-k],[data-i],[data-cp]')||e.target,ga=a=>t.getAttribute&&t.getAttribute(a);
+  if(ga('data-cp')){try{navigator.clipboard.writeText(epTxt).then(()=>$('st').textContent='Riepilogo copiato',()=>$('st').textContent='Copia non riuscita')}catch(e){$('st').textContent='Copia non riuscita'}return}
   if(ga('data-p')){per=+ga('data-p');selD=null;draw();return}
   if(ga('data-all')){hid.clear();sv();draw();return}
   const k=ga('data-k');if(k){hid.has(k)?hid.delete(k):hid.add(k);sv();draw();return}
