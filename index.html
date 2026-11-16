@@ -61,6 +61,7 @@ nav{display:flex;gap:8px;margin-bottom:8px}nav button{flex:1}
 <div class="row"><button id="mic" class="s" type="button">Detta</button><button id="go" class="s" type="button">Compila i campi</button></div>
 </section>
 <div id="form"></div>
+<details class="mn"><summary id="bks">Backup ed esportazione</summary><div class="row"><button id="bk" type="button" class="s">Backup completo (file)</button><button id="rs" type="button" class="s">Ripristina da file</button></div><div class="row"><button id="ai" type="button" class="s">Esporta per AI (legenda e dati)</button></div><input id="rf" type="file" accept=".json,.csv,text/csv,application/json" hidden></details>
 <details class="mn"><summary>Diagnostica connessione</summary><div class="row"><button id="dg" type="button" class="s">Esegui test</button></div><pre id="dgo" style="white-space:pre-wrap;font-size:13px"></pre></details>
 </div>
 <div id="vAnd" hidden></div>
@@ -175,7 +176,8 @@ const rem=()=>{try{return JSON.parse(localStorage.getItem('diario_rem'))||{}}cat
 const all=()=>{const m=rem(),d=load();for(const k in d)if(!d[k].sent||!m[k])m[k]=d[k].row;return m};
 async function pull(){if(!ses)return;try{const j=await post({session:ses,action:'list'});
  if(j.ok){const m={};j.rows.forEach(x=>m[x.data]=x);localStorage.setItem('diario_rem',JSON.stringify(m));if(!dirty)loadDay();if(!$('vAnd').hidden)draw()}
- else if(j.error=='sessione scaduta')endSes()}catch(e){}}
+ else if(j.error=='sessione scaduta')endSes()}catch(e){}
+ await epPush();try{const e=await post({session:ses,action:'ep_list'});if(e.ok){const m={};e.rows.forEach(x=>m[x.d]=x);localStorage.setItem(EPR,JSON.stringify(m));if(!$('vAnd').hidden)elr()}}catch(x){}}
 who();if(ses)sync();
 
 // Sblocco biometrico locale (facoltativo): chiede impronta o volto all’apertura dell’app su questo dispositivo.
@@ -207,7 +209,7 @@ $('dg').onclick=async()=>{const o=$('dgo'),U=CFG.SCRIPT_URL||'',L=[],p=()=>o.tex
   await t('6 riga come testo JSON (solo lettura)',U+'?session='+ses+'&action=list&row='+encodeURIComponent(JSON.stringify(R)));
   await t('7 riga a campi separati (solo lettura)',U+'?'+qs({session:ses,action:'list',row:R}))}
  L.push('Fine');p()};
-bioInit();lockIf();loadDay();
+bioInit();lockIf();loadDay();bkUI();
 
 // Andamento
 let per=30,selD=null,epTxt='',hid=new Set();
@@ -221,16 +223,100 @@ const CL=['#2a78d6','#eb6834','#1baf7a','#eda100','#7a6ae0'],DS=['','5 3','1.5 3
 const GR=[['Sintomi',[['occhio_dx','Occhio destro'],['occhio_sx','Occhio sinistro'],['fotofobia','Fotofobia'],['blefarite','Blefarite']]],['Schermi',[['pc_h','PC'],['cellulare_h','Cellulare'],['tv_h','TV'],['tablet_h','Tablet'],['pc_sera_buio','PC serale al buio']]],['Sonno e luce',[['sonno_ore','Sonno'],['sole_h','Luce solare']]],['Prodotti',[['naviblef','Naviblef'],['recugel','Recugel'],['gocce_n','Gocce']]]];
 const view=v=>{$('vIns').hidden=v!='I';$('vAnd').hidden=v!='A';$('save').hidden=v!='I';$('tI').className=v=='I'?'':'s';$('tA').className=v=='A'?'':'s';if(v=='A')draw()};
 $('tI').onclick=()=>view('I');$('tA').onclick=()=>view('A');
-const EPK='diario_ep';
-const epl=()=>{try{return JSON.parse(localStorage.getItem(EPK))||{}}catch(e){return{}}};
+const EPK='diario_ep',EPD='diario_epdel',EPR='diario_eprem';
+const jl=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}};
+const epl=()=>jl(EPK,{});
 const epw=E=>{try{localStorage.setItem(EPK,JSON.stringify(E))}catch(e){$('st').textContent='Salvataggio locale non riuscito'}};
+const epAll=()=>{const m=jl(EPR,{}),L=epl(),X=jl(EPD,[]),o={};for(const k in m)if(!X.includes(k))o[k]=m[k];for(const k in L)o[k]=L[k].sent&&m[k]?m[k]:L[k];return o};
+const stm=r=>{$('st').textContent=r=='ok'?'Condiviso':r=='dl'?'Condivisione non disponibile: file scaricato':'Condivisione annullata'};
 function download(name,txt){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'text/plain'}));a.download=name;a.click()}
 async function shareTxt(title,name,txt){try{const f=new File([txt],name,{type:'text/plain'});
   if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({title,files:[f]});return'ok'}
   if(navigator.share){await navigator.share({title,text:txt});return'ok'}}catch(e){if(e.name=='AbortError')return'ann'}
  download(name,txt);return'dl'}
-function elr(){const b=$('elb');if(!b)return;const E=epl(),ks=Object.keys(E).sort().reverse();$('els').textContent='Episodi salvati ('+ks.length+')';
- b.innerHTML=ks.length?`<div class="row"><button type="button" class="s" data-ea="1">Condividi tutti (${ks.length})</button></div>`+ks.map(k=>`<p><b>${+k.slice(8)}/${+k.slice(5,7)}/${k.slice(0,4)}</b> ${esc(E[k].n||'')}</p><div class="row"><button type="button" class="s" data-eo="${k}">Apri</button><button type="button" class="s" data-es="${k}">Condividi</button><button type="button" class="s" data-ed="${k}">Elimina</button></div>`).join(''):'<p><small>Nessun episodio salvato. Tocca un giorno, apri "Cosa è cambiato nei giorni prima" e premi "Salva episodio".</small></p>'}
+async function epPush(){if(!ses)return;const L=epl(),X=jl(EPD,[]);let ch=0;
+ for(const k in L){if(L[k].sent)continue;try{const j=await post({session:ses,action:'ep_put',d:k,n:L[k].n||'',s:L[k].s||Date.now()});if(j.ok){L[k].sent=true;ch=1}else break}catch(e){break}}
+ if(ch)epw(L);
+ for(const k of X){try{const j=await post({session:ses,action:'ep_del',d:k});if(j.ok)localStorage.setItem(EPD,JSON.stringify(jl(EPD,[]).filter(x=>x!=k)));else break}catch(e){break}}}
+const VS=[['ind','Indice sintomi (media 0–5)'],['tot','Schermi totali (h)'],['pc_h','PC (h)'],['cellulare_h','Cellulare (h)'],['tablet_h','Tablet (h)'],['tv_h','TV (h)'],['pc_sera_buio','PC serale al buio'],['sonno_ore','Sonno (h)'],['sole_h','Sole (h)'],['naviblef','Naviblef'],['recugel','Recugel'],['gocce_n','Gocce'],['antistaminico','Antistaminico']];
+function epBuild(D,R){
+ const lag=n=>add(D,-n),dm=d=>+d.slice(8)+'/'+ +d.slice(5,7);
+ const val=(day,k)=>{const r=R[day];if(!r)return null;
+  if(k=='tot'){const a=['pc_h','cellulare_h','tablet_h','tv_h'].map(c=>nv(r[c])).filter(v=>v!==null);return a.length?a.reduce((x,y)=>x+y,0):null}
+  if(k=='ind'){const a=['occhio_dx','occhio_sx','fotofobia','blefarite'].map(c=>nv(r[c])).filter(v=>v!==null);return a.length?a.reduce((x,y)=>x+y,0)/a.length:null}
+  return nv(r[k])};
+ const f=v=>v===null?'–':String(Math.round(v*10)/10),mean=a=>a.reduce((x,y)=>x+y,0)/a.length;
+ const cols=[3,2,1,0],flags={};let rows='',txt='Giorno analizzato: '+D+'\nConfronto: valori dei 3 giorni precedenti, del giorno stesso e media dei giorni da D-10 a D-4 (N = giorni con dato). Scale: sintomi 0-5, vuoto = non registrato.\nVariabile | D-3 | D-2 | D-1 | D | media base (N)\n';
+ VS.forEach(([k,l])=>{const b=[];for(let n=4;n<=10;n++){const v=val(lag(n),k);if(v!==null)b.push(v)}
+  const m=b.length?mean(b):null,sd=b.length>=3?Math.sqrt(mean(b.map(v=>(v-m)**2))):null;
+  const cells=cols.map(n=>{const v=val(lag(n),k),hi=n>0&&v!==null&&sd!==null&&Math.abs(v-m)>=Math.max(sd,.5);return{v,hi,n,st:n==0||v===null||sd===null?null:hi?(v>m?'u':'d'):'n'}});
+  flags[k]=cells.slice(0,3).map(c=>c.st);
+  rows+=`<tr><td>${l}</td>${cells.map(c=>`<td${c.hi?' class="hi"':''}>${f(c.v)}${c.hi?(c.v>m?' ▲':' ▼'):''}</td>`).join('')}<td>${f(m)} <small>(${b.length})</small></td></tr>`;
+  txt+=l+' | '+cells.map(c=>f(c.v)+(c.hi?(c.v>m?' ▲':' ▼'):'')).join(' | ')+' | '+f(m)+' ('+b.length+')\n'});
+ let t='';for(let n=3;n>=0;n--){const r=R[lag(n)];if(!r)continue;const p=['mattina','pranzo','sera','spuntini','note'].filter(c=>r[c]!==undefined&&r[c]!=='').map(c=>c+': '+r[c]);if(p.length){t+=`<p><b>${dm(lag(n))}</b> ${esc(p.join(' · '))}</p>`;txt+='\nTesti '+lag(n)+': '+p.join(' · ')}}
+ const raw=[];for(let n=10;n>=0;n--){const r=R[lag(n)];if(r)raw.push(COLS.map(c=>{const v=r[c];return v===undefined||v===null?'':/[",\n]/.test(String(v))?'"'+String(v).replace(/"/g,'""')+'"':v}).join(','))}
+ txt+='\n\nDati grezzi (CSV, giorni da D-10 a D, vuoto = non registrato):\n'+COLS.join(',')+'\n'+raw.join('\n')+'\n\nNota: confronto su un solo episodio, indica cosa è diverso e non cosa è la causa.';
+ const html=`<p><small>Giorno scelto: ${dm(D)}. I valori in grassetto con ▲ o ▼ si discostano dalla media dei giorni da D-10 a D-4 per più di una deviazione standard (serve almeno 3 giorni di confronto, tra parentesi il numero). È un confronto su un solo episodio: mostra cosa è diverso, non cosa è la causa.</small></p><div style="overflow-x:auto"><table class="tb"><tr><th></th><th>D-3</th><th>D-2</th><th>D-1</th><th>Giorno</th><th>Base</th></tr>${rows}</table></div>${t?'<p><b>Pasti e note</b></p>'+t:''}<input id="epn" type="text" placeholder="Nota sull’episodio (facoltativa)" style="margin-top:8px"><div class="row"><button type="button" class="s" data-cp="1">Copia</button><button type="button" class="s" data-sh="1">Condividi</button></div><div class="row"><button type="button" class="s" data-dl="1">Scarica</button><button type="button" data-sv="1">Salva episodio</button></div>`;
+ return{html,txt,flags}}
+function epCmp(){const E=epAll(),ks=Object.keys(E).sort(),R=all(),B=ks.map(k=>epBuild(k,R).flags),N=ks.length;let rows='',txt='Cosa si ripete tra '+N+' episodi (▲ sopra la media di base, ▼ sotto; giorni D-3, D-2, D-1; evidenziato se almeno il 60% degli episodi con dato, minimo 2):\n';
+ VS.forEach(([k,l])=>{let any=0;const cells=[0,1,2].map(i=>{let u=0,d=0,v=0;B.forEach(F=>{const s=F[k]&&F[k][i];if(s===null||s===undefined)return;v++;if(s=='u')u++;if(s=='d')d++});const m=Math.max(u,d);if(m)any=1;return{t:m?(u>=d?'▲':'▼')+m+'/'+v:'–',hi:v>=2&&m>=Math.max(2,Math.ceil(v*.6))}});
+  if(!any)return;rows+=`<tr><td>${l}</td>${cells.map(c=>`<td${c.hi?' class="hi"':''}>${c.t}</td>`).join('')}</tr>`;txt+=l+' | '+cells.map(c=>c.t+(c.hi?' *':'')).join(' | ')+'\n'});
+ const html=`<p><b>Cosa si ripete tra ${N} episodi</b></p><div style="overflow-x:auto"><table class="tb"><tr><th></th><th>D-3</th><th>D-2</th><th>D-1</th></tr>${rows||'<tr><td colspan="4">Nessuno scarto evidente</td></tr>'}</table></div><p><small>Ogni cella conta in quanti episodi la variabile era sopra (▲) o sotto (▼) la propria media di base. Con pochi episodi è solo un indizio: serve che lo stesso scarto ricompaia più volte.</small></p>`;
+ return{html,txt}}
+function elr(){const b=$('elb');if(!b)return;const E=epAll(),ks=Object.keys(E).sort().reverse();$('els').textContent='Episodi salvati ('+ks.length+')';
+ b.innerHTML=ks.length?`<div class="row"><button type="button" class="s" data-ea="1">Condividi tutti (${ks.length})</button>${ks.length>1?'<button type="button" class="s" data-ec="1">Cosa si ripete</button>':''}</div><div id="elc"></div>`+ks.map(k=>`<p><b>${+k.slice(8)}/${+k.slice(5,7)}/${k.slice(0,4)}</b> ${esc(E[k].n||'')}</p><div class="row"><button type="button" class="s" data-eo="${k}">Apri</button><button type="button" class="s" data-es="${k}">Condividi</button><button type="button" class="s" data-ed="${k}">Elimina</button></div>`).join(''):'<p><small>Nessun episodio salvato. Tocca un giorno, apri "Cosa è cambiato nei giorni prima" e premi "Salva episodio".</small></p>'}
+
+// Esportazione, backup e ripristino
+function csvText(){const d=all(),q=v=>'"'+String(v).replace(/"/g,'""')+'"';return[['schema_version'].concat(COLS).map(q).join(',')].concat(Object.keys(d).sort().map(k=>[2].concat(COLS.map(c=>d[k][c]??'')).map(q).join(','))).join('\n')}
+const LEGEND=`# Diario giornaliero di sintomi oculari: legenda e istruzioni
+Una riga per giorno. Leggi la legenda prima di analizzare.
+
+## Colonne
+- data (aaaa-mm-gg, fuso di Roma); schema_version (dalla 2 recugel e naviblef sono conteggi).
+- sonno_ore, sonno_qualita (scarsa, media, buona); cellulare_h, tablet_h, tv_h, pc_h = ore di utilizzo; pc_sera_buio = 1 se c'è stata una sessione serale al PC in ambiente poco illuminato.
+- Sintomi (soggettivi, 0 = assente, più alto = più intenso): occhio_dx, occhio_sx, fotofobia, blefarite da 0 a 5; psoriasi da 0 a 3.
+- recugel, naviblef, gocce_n = numero di applicazioni; antistaminico = 0/1; altro_prodotto, mattina, pranzo, sera, spuntini, note = testo libero; sole_h = ore di luce solare.
+
+## Regole
+- Campo vuoto = dato non registrato, non zero. Non includere i vuoti nelle medie.
+- Escludi la riga della data di esportazione (può essere parziale). Segnala i giorni mancanti e non interpolare.
+- schermi_totali = pc_h + cellulare_h + tablet_h + tv_h; indice_sintomi = media di occhio_dx, occhio_sx, fotofobia, blefarite; la psoriasi si analizza a parte.
+
+## Analisi richiesta
+Statistiche con N; correlazioni nello stesso giorno, il giorno dopo e con media mobile di 3 giorni; pasti raggruppati in categorie; ipotesi ordinate per solidità. Dichiara sempre N: con meno di 25-30 giorni completi le correlazioni sono solo esplorative. Non presentare le correlazioni come cause (un prodotto usato nei giorni peggiori può essere una risposta ai sintomi). Nessuna diagnosi né indicazioni mediche.
+`;
+function parseCsv(t){t=t.replace(/^\ufeff/,'');const R=[];let r=[],c='',q=0;for(let i=0;i<t.length;i++){const ch=t[i];if(q){if(ch=='"'){if(t[i+1]=='"'){c+='"';i++}else q=0}else c+=ch}else if(ch=='"')q=1;else if(ch==','){r.push(c);c=''}else if(ch=='\n'||ch=='\r'){if(ch=='\r'&&t[i+1]=='\n')i++;r.push(c);c='';R.push(r);r=[]}else c+=ch}
+ if(c!==''||r.length){r.push(c);R.push(r)}const h=R.shift()||[];return R.filter(x=>x.length>1).map(x=>Object.fromEntries(h.map((k,i)=>[k,x[i]])))}
+function bkUI(){const el=$('bks');if(!el)return;const t=localStorage.getItem('diario_lastbk'),n=t?Math.round((pd(today())-pd(t))/864e5):null;
+ el.textContent='Backup ed esportazione ('+(n===null?'nessun backup fatto':n==0?'backup di oggi':n+' giorni dall’ultimo backup')+')'}
+$('bk').onclick=()=>{const o={app:'diario',schema:2,esportato:new Date().toISOString(),oggi:today(),giorni:all(),episodi:epAll()};download('diario-backup-'+today()+'.json',JSON.stringify(o));try{localStorage.setItem('diario_lastbk',today())}catch(e){}bkUI();$('st').textContent='Backup scaricato: conservalo anche fuori da Google'};
+$('rs').onclick=()=>$('rf').click();
+$('rf').onchange=async()=>{const f=$('rf').files[0];if(!f)return;let rows=[],eps={};
+ try{const t=await f.text();if(t.trim().startsWith('{')){const o=JSON.parse(t);rows=Object.values(o.giorni||{});eps=o.episodi||{}}else rows=parseCsv(t)}catch(e){$('st').textContent='File non valido';$('rf').value='';return}
+ rows=rows.filter(r=>/^\d{4}-\d{2}-\d{2}$/.test(r.data||''));
+ if(!rows.length&&!Object.keys(eps).length){$('st').textContent='Nessun giorno trovato nel file';$('rf').value='';return}
+ if(!confirm('Importare '+rows.length+' giorni? Le date già presenti verranno sostituite con quelle del file.')){$('rf').value='';return}
+ const d=load();rows.forEach(r=>{const x={};COLS.forEach(c=>{if(r[c]!==undefined&&r[c]!=='')x[c]=r[c]});d[r.data]={sent:false,row:x}});store(d);
+ const E=epl();Object.values(eps).forEach(e=>{if(e&&e.d)E[e.d]={d:e.d,n:e.n||'',s:e.s||Date.now(),sent:false}});epw(E);
+ $('rf').value='';loadDay();$('st').textContent='Importati '+rows.length+' giorni';sync()};
+$('ai').onclick=async()=>{const E=epAll(),ks=Object.keys(E).sort();
+ const t=LEGEND+'\n## Dati\nData di esportazione: '+today()+' (fuso Roma). La riga di questa data può essere parziale: escludila.\n\n'+csvText()+(ks.length?'\n\n## Episodi salvati (data e nota)\n'+ks.map(k=>k+': '+(E[k].n||'(senza nota)')).join('\n'):'')+'\n';
+ stm(await shareTxt('Diario per AI','diario-per-ai-'+today()+'.txt',t))};
+
+// Grafici come immagine
+function chartSvg(){const cs=getComputedStyle(document.documentElement),V=n=>cs.getPropertyValue(n).trim()||'#888',ps=[...document.querySelectorAll('#vAnd svg[id^=p]')];if(!ps.length)return null;
+ const W=640;let y=34,o='';
+ ps.forEach(sv=>{const k=sv.previousElementSibling,title=k&&k.firstChild?k.firstChild.textContent.trim():'',leg=k?[...k.querySelectorAll('.lg:not(.off)')].map(b=>b.textContent.trim()).join(' · '):'';
+  o+=`<text x="8" y="${y}" font-size="13" font-weight="600" style="fill:var(--tx)">${esc(title)}</text><text x="8" y="${y+14}" font-size="11" style="fill:var(--mu)">${esc(leg)}</text><g transform="translate(0,${y+18})">${sv.innerHTML}</g>`;y+=18+108+16});
+ o+=`<g transform="translate(0,${y-6})">${$('ax').innerHTML}</g>`;y+=22;
+ const h=y*2;let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${y}" width="1280" height="${h}" font-family="system-ui,Segoe UI,Roboto,sans-serif"><rect width="${W}" height="${y}" style="fill:var(--bg)"/><text x="8" y="20" font-size="14" font-weight="600" style="fill:var(--tx)">Diario: ultimi ${per} giorni, al ${today().split('-').reverse().join('/')}</text>${o}</svg>`;
+ svg=svg.replace(/var\((--[a-z]+)\)/g,(m,n)=>V(n));return{svg,h}}
+async function chartPng(){const x=chartSvg();if(!x){$('st').textContent='Nessun grafico da salvare';return}
+ const img=new Image();img.onload=()=>{const c=document.createElement('canvas');c.width=1280;c.height=x.h;c.getContext('2d').drawImage(img,0,0);
+  c.toBlob(async b=>{const f=new File([b],'grafici-diario-'+today()+'.png',{type:'image/png'});
+   try{if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({title:'Grafici diario',files:[f]});return}}catch(e){if(e.name=='AbortError')return}
+   const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=f.name;a.click();$('st').textContent='Immagine scaricata'})};
+ img.onerror=()=>{$('st').textContent='Immagine non creata'};img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(x.svg)}
 function draw(){
  const open=$('mn')&&$('mn').open,epOpen=$('ep')&&$('ep').open,elOpen=$('el')&&$('el').open,R=all(),n=per,W=640,PL=26,PR=6,bw=(W-PL-PR)/n,X=i=>PL+bw*i+bw/2,tw=Math.max(3,Math.min(24,bw*.8));
  const days=Array.from({length:n},(_,i)=>add(today(),i-n+1)),g=(i,k)=>{const r=R[days[i]];return r?nv(r[k]):null};
@@ -252,7 +338,7 @@ function draw(){
  const sw=l=>l[2]=='l'?`<svg width="18" height="8" aria-hidden="true"><line x1="0" x2="18" y1="4" y2="4" style="stroke:${l[1]}" stroke-width="2" stroke-dasharray="${l[3]||''}"/></svg>`:l[2]=='d'?`<i style="width:8px;height:8px;border-radius:50%;background:${l[1]}"></i>`:`<i style="width:10px;height:10px;border-radius:2px;background:${l[1]}"></i>`;
  const have=days.some(d=>R[d]),hn=hid.size;
  const mn=`<details id="mn" class="mn"${open?' open':''}><summary>Cosa mostrare${hn?' ('+hn+' nascosti)':''}</summary>${GR.map(([t,ks])=>`<h3>${t}</h3><div class="g2">${ks.map(([k,l])=>`<label class="c"><input type="checkbox" data-k="${k}"${on(k)?' checked':''}>${l}</label>`).join('')}</div>`).join('')}<div class="row"><button type="button" class="s" data-all="1">Mostra tutto</button></div></details>`;
- $('vAnd').innerHTML=`<div class="row pd">${[5,10,14,30,90,180].map(v=>`<button type="button" data-p="${v}" class="${v==per?'':'s'}">${v} gg</button>`).join('')}</div>`+mn+(have?'':'<p class="k">Nessun dato in questo periodo</p>')+(P.length?'':'<p class="k">Nessuna serie selezionata</p>')+P.map((p,k)=>`<div class="k">${p.t}${p.L.map(l=>`<button type="button" class="lg${on(l[4])?'':' off'}" data-k="${l[4]}" aria-pressed="${on(l[4])}">${sw(l)}${l[0]}</button>`).join('')}</div>${p.ok?`<svg class="sv" id="p${k}" viewBox="0 0 ${W} 108" role="img" aria-label="${p.a}"></svg>`:'<p class="k" style="font-weight:400;color:var(--mu);margin:6px 0">Tutte le voci sono nascoste: tocca una voce per riattivarla</p>'}`).join('')+'<svg class="sv" id="ax" viewBox="0 0 640 18" aria-hidden="true"></svg><div id="det"></div><details id="ep" class="mn ep"'+(epOpen?' open':'')+'><summary>Cosa è cambiato nei giorni prima</summary><div id="epb"></div></details><details id="el" class="mn ep"'+(elOpen?' open':'')+'><summary id="els">Episodi salvati</summary><div id="elb"></div></details>';
+ $('vAnd').innerHTML=`<div class="row pd">${[5,10,14,30,90,180].map(v=>`<button type="button" data-p="${v}" class="${v==per?'':'s'}">${v} gg</button>`).join('')}</div><div class="row"><button type="button" class="s" data-img="1">Salva i grafici come immagine</button></div><p class="k" style="font-weight:400;color:var(--mu);margin:8px 0 0">Giorni con dati: ${days.filter(d=>R[d]).length} su ${n}</p>`+mn+(have?'':'<p class="k">Nessun dato in questo periodo</p>')+(P.length?'':'<p class="k">Nessuna serie selezionata</p>')+P.map((p,k)=>`<div class="k">${p.t}${p.L.map(l=>`<button type="button" class="lg${on(l[4])?'':' off'}" data-k="${l[4]}" aria-pressed="${on(l[4])}">${sw(l)}${l[0]}</button>`).join('')}</div>${p.ok?`<svg class="sv" id="p${k}" viewBox="0 0 ${W} 108" role="img" aria-label="${p.a}"></svg>`:'<p class="k" style="font-weight:400;color:var(--mu);margin:6px 0">Tutte le voci sono nascoste: tocca una voce per riattivarla</p>'}`).join('')+'<svg class="sv" id="ax" viewBox="0 0 640 18" aria-hidden="true"></svg><div id="det"></div><details id="ep" class="mn ep"'+(epOpen?' open':'')+'><summary>Cosa è cambiato nei giorni prima</summary><div id="epb"></div></details><details id="el" class="mn ep"'+(elOpen?' open':'')+'><summary id="els">Episodi salvati</summary><div id="elb"></div></details>';
  P.forEach((p,k)=>{if(!p.ok)return;const T=6,B=100,a=v=>B-(B-T)*v/p.max;let s='';
   for(let v=0;v<=p.max+1e-9;v+=p.st)s+=`<line x1="${PL}" x2="${W-PR}" y1="${a(v)}" y2="${a(v)}" style="stroke:var(--ln)" stroke-width="0.5"/><text x="${PL-5}" y="${a(v)+4}" text-anchor="end" font-size="11" style="fill:var(--mu)">${Math.round(v*10)/10}</text>`;
   s+=`<rect class="hl" y="0" height="108" width="${bw}" style="fill:var(--tx)" opacity="0.07"/>`+p.d(a);
@@ -260,35 +346,20 @@ function draw(){
   $('p'+k).innerHTML=s});
  const st=n<=14?1:n<=30?3:n<=90?10:20;
  $('ax').innerHTML=days.map((d,i)=>(n-1-i)%st?'':`<text x="${X(i)}" y="13" text-anchor="middle" font-size="11" style="fill:var(--mu)">${n>30?+d.slice(8)+'/'+ +d.slice(5,7):+d.slice(8)}</text>`).join('');
- const epi=()=>{const D=selD,lag=n=>add(D,-n),dm=d=>+d.slice(8)+'/'+ +d.slice(5,7);
-  const val=(day,k)=>{const r=R[day];if(!r)return null;
-   if(k=='tot'){const a=['pc_h','cellulare_h','tablet_h','tv_h'].map(c=>nv(r[c])).filter(v=>v!==null);return a.length?a.reduce((x,y)=>x+y,0):null}
-   if(k=='ind'){const a=['occhio_dx','occhio_sx','fotofobia','blefarite'].map(c=>nv(r[c])).filter(v=>v!==null);return a.length?a.reduce((x,y)=>x+y,0)/a.length:null}
-   return nv(r[k])};
-  const f=v=>v===null?'–':String(Math.round(v*10)/10),mean=a=>a.reduce((x,y)=>x+y,0)/a.length;
-  const VS=[['ind','Indice sintomi (media 0–5)'],['tot','Schermi totali (h)'],['pc_h','PC (h)'],['cellulare_h','Cellulare (h)'],['tablet_h','Tablet (h)'],['tv_h','TV (h)'],['pc_sera_buio','PC serale al buio'],['sonno_ore','Sonno (h)'],['sole_h','Sole (h)'],['naviblef','Naviblef'],['recugel','Recugel'],['gocce_n','Gocce'],['antistaminico','Antistaminico']];
-  const cols=[3,2,1,0];let rows='',txt='Giorno analizzato: '+D+'\nConfronto: valori dei 3 giorni precedenti, del giorno stesso e media dei giorni da D-10 a D-4 (N = giorni con dato). Scale: sintomi 0-5, vuoto = non registrato.\nVariabile | D-3 | D-2 | D-1 | D | media base (N)\n';
-  VS.forEach(([k,l])=>{const b=[];for(let n=4;n<=10;n++){const v=val(lag(n),k);if(v!==null)b.push(v)}
-   const m=b.length?mean(b):null,sd=b.length>=3?Math.sqrt(mean(b.map(v=>(v-m)**2))):null;
-   const cells=cols.map(n=>{const v=val(lag(n),k),hi=n>0&&v!==null&&sd!==null&&Math.abs(v-m)>=Math.max(sd,.5);return{v,hi}});
-   rows+=`<tr><td>${l}</td>${cells.map(c=>`<td${c.hi?' class="hi"':''}>${f(c.v)}${c.hi?(c.v>m?' ▲':' ▼'):''}</td>`).join('')}<td>${f(m)} <small>(${b.length})</small></td></tr>`;
-   txt+=l+' | '+cells.map(c=>f(c.v)+(c.hi?(c.v>m?' ▲':' ▼'):'')).join(' | ')+' | '+f(m)+' ('+b.length+')\n'});
-  let t='';for(let n=3;n>=0;n--){const r=R[lag(n)];if(!r)continue;const p=['mattina','pranzo','sera','spuntini','note'].filter(c=>r[c]!==undefined&&r[c]!=='').map(c=>c+': '+r[c]);if(p.length){t+=`<p><b>${dm(lag(n))}</b> ${esc(p.join(' · '))}</p>`;txt+='\nTesti '+lag(n)+': '+p.join(' · ')}}
-  const raw=[];for(let n=10;n>=0;n--){const r=R[lag(n)];if(r)raw.push(COLS.map(c=>{const v=r[c];return v===undefined||v===null?'':/[",\n]/.test(String(v))?'"'+String(v).replace(/"/g,'""')+'"':v}).join(','))}
-  epTxt=txt+'\n\nDati grezzi (CSV, giorni da D-10 a D, vuoto = non registrato):\n'+COLS.join(',')+'\n'+raw.join('\n')+'\n\nNota: confronto su un solo episodio, indica cosa è diverso e non cosa è la causa.';
-  $('epb').innerHTML=`<p><small>Giorno scelto: ${dm(D)}. I valori in grassetto con ▲ o ▼ si discostano dalla media dei giorni da D-10 a D-4 per più di una deviazione standard (serve almeno 3 giorni di confronto, tra parentesi il numero). È un confronto su un solo episodio: mostra cosa è diverso, non cosa è la causa.</small></p><div style="overflow-x:auto"><table class="tb"><tr><th></th><th>D-3</th><th>D-2</th><th>D-1</th><th>Giorno</th><th>Base</th></tr>${rows}</table></div>${t?'<p><b>Pasti e note</b></p>'+t:''}<input id="epn" type="text" placeholder="Nota sull’episodio (facoltativa)" style="margin-top:8px"><div class="row"><button type="button" class="s" data-cp="1">Copia</button><button type="button" class="s" data-sh="1">Condividi</button></div><div class="row"><button type="button" class="s" data-dl="1">Scarica</button><button type="button" data-sv="1">Salva episodio</button></div>`};
+ const epi=()=>{const x=epBuild(selD,R);epTxt=x.txt;$('epb').innerHTML=x.html};
  const sel=i=>{selD=days[i];document.querySelectorAll('.hl').forEach(r=>r.setAttribute('x',PL+bw*i));
   const r=R[selD]||{},v=k=>r[k]!==undefined&&r[k]!==''?esc(r[k]):'–',f=(l,x)=>`<div><b>${l}</b>${x}</div>`,t=pd(selD).toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',timeZone:'UTC'});
   $('det').innerHTML=`<div style="grid-column:1/-1;font-weight:600;font-size:15px">${t[0].toUpperCase()+t.slice(1)}</div>`+(R[selD]?f('Sonno',v('sonno_ore')+' h, '+v('sonno_qualita'))+f('Schermi',`PC ${v('pc_h')}, cell. ${v('cellulare_h')}, TV ${v('tv_h')}, tablet ${v('tablet_h')} (h)`)+f('PC serale al buio',+r.pc_sera_buio?'sì':'no')+f('Sintomi',`dx ${v('occhio_dx')}, sx ${v('occhio_sx')}, fotofobia ${v('fotofobia')}, blefarite ${v('blefarite')}, psoriasi ${v('psoriasi')}`)+f('Prodotti',`Naviblef ${v('naviblef')}, Recugel ${v('recugel')}, gocce ${v('gocce_n')}, antistaminico ${+r.antistaminico?'sì':'no'}, altro ${v('altro_prodotto')}`)+f('Luce solare',v('sole_h')+' h')+f('Mattina',v('mattina'))+f('Pranzo',v('pranzo'))+f('Sera',v('sera'))+f('Spuntini',v('spuntini'))+f('Note',v('note')):'<div>Nessun dato per questo giorno</div>');epi()};
- $('vAnd').onclick=e=>{const t=e.target.closest&&e.target.closest('[data-p],[data-all],[data-k],[data-i],[data-cp],[data-sh],[data-dl],[data-sv],[data-eo],[data-es],[data-ed],[data-ea]')||e.target,ga=a=>t.getAttribute&&t.getAttribute(a);
-  const stm=r=>{$('st').textContent=r=='ok'?'Condiviso':r=='dl'?'Condivisione non disponibile: file scaricato':'Condivisione annullata'};
+ $('vAnd').onclick=e=>{const t=e.target.closest&&e.target.closest('[data-p],[data-all],[data-k],[data-i],[data-cp],[data-sh],[data-dl],[data-sv],[data-eo],[data-es],[data-ed],[data-ea],[data-ec],[data-img]')||e.target,ga=a=>t.getAttribute&&t.getAttribute(a);
+  if(ga('data-img')){chartPng();return}
+  if(ga('data-ec')){$('elc').innerHTML=epCmp().html;return}
   if(ga('data-sh')){shareTxt('Diario: episodio '+selD,'episodio-'+selD+'.txt',epTxt).then(stm);return}
   if(ga('data-dl')){download('episodio-'+selD+'.txt',epTxt);$('st').textContent='File scaricato';return}
-  if(ga('data-sv')){const n=(($('epn')||{}).value||'').trim(),E=epl();E[selD]={d:selD,n,t:(n?'Nota: '+n+'\n':'')+epTxt,s:Date.now()};epw(E);$('st').textContent='Episodio salvato';elr();return}
+  if(ga('data-sv')){const n=(($('epn')||{}).value||'').trim(),E=epl();E[selD]={d:selD,n,s:Date.now(),sent:false};epw(E);try{localStorage.setItem(EPD,JSON.stringify(jl(EPD,[]).filter(x=>x!=selD)))}catch(e){}$('st').textContent='Episodio salvato';elr();if(ses)epPush().then(pull);return}
   if(ga('data-eo')){const D=ga('data-eo'),dd=Math.round((pd(today())-pd(D))/864e5)+1;per=[5,10,14,30,90,180].find(p=>p>=dd)||180;selD=D;if($('ep'))$('ep').open=true;draw();return}
-  if(ga('data-es')){const E=epl()[ga('data-es')];if(E)shareTxt('Diario: episodio '+E.d,'episodio-'+E.d+'.txt',E.t).then(stm);return}
-  if(ga('data-ed')){const E=epl();delete E[ga('data-ed')];epw(E);elr();return}
-  if(ga('data-ea')){const E=epl(),ks=Object.keys(E).sort();const t='Raccolta di '+ks.length+' episodi salvati dal diario di sintomi oculari. Ogni episodio ha il confronto con i giorni precedenti e i dati grezzi. Scale: sintomi 0-5 (psoriasi 0-3), vuoto = non registrato. Cerca ciò che si ripete tra gli episodi, dichiara N e non dedurre cause.\n'+ks.map(k=>'\n=== Episodio '+k+' ===\n'+E[k].t).join('\n');shareTxt('Diario: '+ks.length+' episodi','episodi-diario.txt',t).then(stm);return}
+  if(ga('data-es')){const k=ga('data-es'),E=epAll()[k];if(E)shareTxt('Diario: episodio '+k,'episodio-'+k+'.txt',(E.n?'Nota: '+E.n+'\n':'')+epBuild(k,all()).txt).then(stm);return}
+  if(ga('data-ed')){const k=ga('data-ed'),E=epl();delete E[k];epw(E);const X=jl(EPD,[]);if(!X.includes(k))X.push(k);try{localStorage.setItem(EPD,JSON.stringify(X))}catch(e){}elr();if(ses)epPush().then(pull);return}
+  if(ga('data-ea')){const E=epAll(),ks=Object.keys(E).sort(),R2=all();const t='Raccolta di '+ks.length+' episodi salvati dal diario di sintomi oculari. Ogni episodio ha il confronto con i giorni precedenti e i dati grezzi. Scale: sintomi 0-5 (psoriasi 0-3), vuoto = non registrato. Cerca ciò che si ripete tra gli episodi, dichiara N e non dedurre cause.\n'+ks.map(k=>'\n=== Episodio '+k+(E[k].n?' — '+E[k].n:'')+' ===\n'+epBuild(k,R2).txt).join('\n')+'\n\n'+epCmp().txt;shareTxt('Diario: '+ks.length+' episodi','episodi-diario.txt',t).then(stm);return}
   if(ga('data-cp')){try{navigator.clipboard.writeText(epTxt).then(()=>$('st').textContent='Riepilogo copiato',()=>$('st').textContent='Copia non riuscita')}catch(e){$('st').textContent='Copia non riuscita'}return}
   if(ga('data-p')){per=+ga('data-p');selD=null;draw();return}
   if(ga('data-all')){hid.clear();sv();draw();return}
