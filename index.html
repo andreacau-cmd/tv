@@ -159,16 +159,18 @@ async function login(cred){try{const j=await post({action:'login',token:cred});
 function initG(){
  google.accounts.id.initialize({client_id:CFG.CLIENT_ID,callback:r=>login(r.credential),auto_select:true});
  google.accounts.id.renderButton($('gbtn'),{theme:'outline',size:'medium'});if(!ses)google.accounts.id.prompt()}
-let busy=0;
-async function sync(){if(busy)return;busy=1;try{await syncRun()}finally{busy=0}}
+let busy=0,again=0;
+async function sync(){if(busy){again=1;return}busy=1;try{do{again=0;await syncRun()}while(again)}finally{busy=0}}
 async function syncRun(){
  if(!ses){$('st').textContent='Accedi con Google per sincronizzare';return}
- const d=load();let n=0;
- for(const k in d){if(d[k].sent)continue;
-  try{const j=await post({session:ses,row:compact(d[k].row)});
-   if(j.ok){d[k].sent=true;n++}else{if(j.error=='sessione scaduta')endSes();$('st').textContent='Rifiutato: '+j.error;break}}
-  catch(e){$('st').textContent='Sincronizzazione non riuscita ('+e.message+'; richiesta di '+(CFG.SCRIPT_URL+'?'+qs({session:ses,row:compact(d[k].row)})).length+' caratteri): dati tenuti sul dispositivo';break}}
- store(d);if(n)$('st').textContent=n+(n>1?' giorni sincronizzati':' giorno sincronizzato');await pull()}
+ const keys=Object.keys(load()).filter(k=>!load()[k].sent);let n=0,i=0;
+ for(const k of keys){const cur=load()[k];if(!cur||cur.sent)continue;const snap=JSON.stringify(cur.row);i++;
+  if(keys.length>1)$('st').textContent='Invio dei dati: '+i+' di '+keys.length;
+  try{const j=await post({session:ses,row:compact(cur.row)});
+   if(j.ok){const D=load();if(D[k]&&JSON.stringify(D[k].row)==snap){D[k].sent=true;store(D)}else again=1;n++}
+   else{if(j.error=='sessione scaduta')endSes();$('st').textContent='Rifiutato: '+j.error;break}}
+  catch(e){$('st').textContent='Sincronizzazione non riuscita ('+e.message+'; richiesta di '+(CFG.SCRIPT_URL+'?'+qs({session:ses,row:compact(cur.row)})).length+' caratteri): dati tenuti sul dispositivo';break}}
+ if(n)$('st').textContent=n+(n>1?' giorni sincronizzati':' giorno sincronizzato');await pull()}
 $('sync').onclick=sync;
 
 // Dati remoti (foglio) uniti a quelli locali non ancora inviati
@@ -234,10 +236,11 @@ async function shareTxt(title,name,txt){try{const f=new File([txt],name,{type:'t
   if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({title,files:[f]});return'ok'}
   if(navigator.share){await navigator.share({title,text:txt});return'ok'}}catch(e){if(e.name=='AbortError')return'ann'}
  download(name,txt);return'dl'}
-async function epPush(){if(!ses)return;const L=epl(),X=jl(EPD,[]);let ch=0;
- for(const k in L){if(L[k].sent)continue;try{const j=await post({session:ses,action:'ep_put',d:k,n:L[k].n||'',s:L[k].s||Date.now()});if(j.ok){L[k].sent=true;ch=1}else break}catch(e){break}}
- if(ch)epw(L);
- for(const k of X){try{const j=await post({session:ses,action:'ep_del',d:k});if(j.ok)localStorage.setItem(EPD,JSON.stringify(jl(EPD,[]).filter(x=>x!=k)));else break}catch(e){break}}}
+async function epPush(){if(!ses)return;
+ for(const k of Object.keys(epl())){const e=epl()[k];if(!e||e.sent)continue;const snap=JSON.stringify([e.n,e.s]);
+  try{const j=await post({session:ses,action:'ep_put',d:k,n:e.n||'',s:e.s||Date.now()});
+   if(j.ok){const L=epl();if(L[k]&&JSON.stringify([L[k].n,L[k].s])==snap){L[k].sent=true;epw(L)}}else break}catch(x){break}}
+ for(const k of jl(EPD,[])){try{const j=await post({session:ses,action:'ep_del',d:k});if(j.ok)localStorage.setItem(EPD,JSON.stringify(jl(EPD,[]).filter(x=>x!=k)));else break}catch(x){break}}}
 const VS=[['ind','Indice sintomi (media 0–5)'],['tot','Schermi totali (h)'],['pc_h','PC (h)'],['cellulare_h','Cellulare (h)'],['tablet_h','Tablet (h)'],['tv_h','TV (h)'],['pc_sera_buio','PC serale al buio'],['sonno_ore','Sonno (h)'],['sole_h','Sole (h)'],['naviblef','Naviblef'],['recugel','Recugel'],['gocce_n','Gocce'],['antistaminico','Antistaminico']];
 function epBuild(D,R){
  const lag=n=>add(D,-n),dm=d=>+d.slice(8)+'/'+ +d.slice(5,7);
@@ -295,10 +298,15 @@ $('rf').onchange=async()=>{const f=$('rf').files[0];if(!f)return;let rows=[],eps
  try{const t=await f.text();if(t.trim().startsWith('{')){const o=JSON.parse(t);rows=Object.values(o.giorni||{});eps=o.episodi||{}}else rows=parseCsv(t)}catch(e){$('st').textContent='File non valido';$('rf').value='';return}
  rows=rows.filter(r=>/^\d{4}-\d{2}-\d{2}$/.test(r.data||''));
  if(!rows.length&&!Object.keys(eps).length){$('st').textContent='Nessun giorno trovato nel file';$('rf').value='';return}
- if(!confirm('Importare '+rows.length+' giorni? Le date già presenti verranno sostituite con quelle del file.')){$('rf').value='';return}
- const d=load();rows.forEach(r=>{const x={};COLS.forEach(c=>{if(r[c]!==undefined&&r[c]!=='')x[c]=r[c]});d[r.data]={sent:false,row:x}});store(d);
- const E=epl();Object.values(eps).forEach(e=>{if(e&&e.d)E[e.d]={d:e.d,n:e.n||'',s:e.s||Date.now(),sent:false}});epw(E);
- $('rf').value='';loadDay();$('st').textContent='Importati '+rows.length+' giorni';sync()};
+ if(!confirm('Il file contiene '+rows.length+' giorni. Quelli diversi dai dati attuali verranno sostituiti con quelli del file. Continuare?')){$('rf').value='';return}
+ $('st').textContent='Confronto con i dati attuali…';if(ses)await pull();
+ const nm=o=>JSON.stringify(Object.keys(o).sort().map(k=>[k,String(o[k])])),cur=all(),d=load();let ch=0;
+ rows.forEach(r=>{const x={};COLS.forEach(c=>{if(r[c]!==undefined&&r[c]!=='')x[c]=r[c]});const o=cur[r.data]?compact(cur[r.data]):null;if(o&&nm(o)==nm(x))return;d[r.data]={sent:false,row:x};ch++});
+ store(d);
+ const E=epl(),EA=epAll();Object.values(eps).forEach(e=>{if(e&&e.d&&!EA[e.d])E[e.d]={d:e.d,n:e.n||'',s:e.s||Date.now(),sent:false}});epw(E);
+ $('rf').value='';loadDay();
+ $('st').textContent=ch?'Ripristinati '+ch+' giorni da inviare ('+(rows.length-ch)+' erano già uguali)':'Niente da ripristinare: i dati coincidono con il backup';
+ if(ch)sync()};
 $('ai').onclick=async()=>{const E=epAll(),ks=Object.keys(E).sort();
  const t=LEGEND+'\n## Dati\nData di esportazione: '+today()+' (fuso Roma). La riga di questa data può essere parziale: escludila.\n\n'+csvText()+(ks.length?'\n\n## Episodi salvati (data e nota)\n'+ks.map(k=>k+': '+(E[k].n||'(senza nota)')).join('\n'):'')+'\n';
  stm(await shareTxt('Diario per AI','diario-per-ai-'+today()+'.txt',t))};
