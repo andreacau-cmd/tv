@@ -61,7 +61,7 @@ nav{display:flex;gap:8px;margin-bottom:8px}nav button{flex:1}
 <div class="row"><button id="mic" class="s" type="button">Detta</button><button id="go" class="s" type="button">Compila i campi</button></div>
 </section>
 <div id="form"></div>
-<details class="mn"><summary id="bks">Backup ed esportazione</summary><div class="row"><button id="bk" type="button" class="s">Backup completo (file)</button><button id="rs" type="button" class="s">Ripristina da file</button></div><div class="row"><button id="ai" type="button" class="s">Esporta per AI (legenda e dati)</button></div><input id="rf" type="file" accept=".json,.csv,text/csv,application/json" hidden></details>
+<details class="mn"><summary id="bks">Backup ed esportazione</summary><div class="row"><button id="bk" type="button" class="s">Backup completo (file)</button><button id="rs" type="button" class="s">Ripristina da file</button></div><div class="row"><button id="ai" type="button" class="s">Esporta per AI (legenda e dati)</button></div><div class="row"><button id="rp" type="button" class="s">Controlla e ripara il foglio</button></div><input id="rf" type="file" accept=".json,.csv,text/csv,application/json" hidden></details>
 <details class="mn"><summary>Diagnostica connessione</summary><div class="row"><button id="dg" type="button" class="s">Esegui test</button></div><pre id="dgo" style="white-space:pre-wrap;font-size:13px"></pre></details>
 </div>
 <div id="vAnd" hidden></div>
@@ -72,6 +72,7 @@ nav{display:flex;gap:8px;margin-bottom:8px}nav button{flex:1}
 <script src="https://accounts.google.com/gsi/client" async onload="initG()"></script>
 <script>
 const $=id=>document.getElementById(id);
+const VER='2026-11-17c';
 // k: n numero, t testo, x testo lungo, s menu, b casella, r scala 0-N
 const UI=[
 ['Sonno',[['n','sonno_ore','Sonno (ore)'],['s','sonno_qualita','Qualità',['','scarsa','media','buona']]]],
@@ -177,7 +178,7 @@ $('sync').onclick=sync;
 const rem=()=>{try{return JSON.parse(localStorage.getItem('diario_rem'))||{}}catch(e){return{}}};
 const all=()=>{const m=rem(),d=load();for(const k in d)if(!d[k].sent||!m[k])m[k]=d[k].row;return m};
 async function pull(){if(!ses)return;try{const j=await post({session:ses,action:'list'});
- if(j.ok){const m={};j.rows.forEach(x=>m[x.data]=x);localStorage.setItem('diario_rem',JSON.stringify(m));if(!dirty)loadDay();if(!$('vAnd').hidden)draw()}
+ if(j.ok){const m={};j.rows.forEach(x=>m[x.data]=x);localStorage.setItem('diario_rem',JSON.stringify(m));localStorage.setItem('diario_warn',JSON.stringify({o:j.orfane||0,d:j.dup||0}));if(!dirty)loadDay();if(!$('vAnd').hidden)draw()}
  else if(j.error=='sessione scaduta')endSes()}catch(e){}
  await epPush();try{const e=await post({session:ses,action:'ep_list'});if(e.ok){const m={};e.rows.forEach(x=>m[x.d]=x);localStorage.setItem(EPR,JSON.stringify(m));if(!$('vAnd').hidden)elr()}}catch(x){}}
 who();if(ses)sync();
@@ -199,7 +200,7 @@ $('unl').onclick=async()=>{try{await navigator.credentials.get({publicKey:{chall
 $('ug').onclick=()=>{localStorage.removeItem('diario_bio');endSes();$('lock').hidden=true};
 document.addEventListener('visibilitychange',()=>{if(document.hidden)T=Date.now();else if(Date.now()-T>3e5)lockIf()});
 $('dg').onclick=async()=>{const o=$('dgo'),U=CFG.SCRIPT_URL||'',L=[],p=()=>o.textContent=L.join('\n');
- L.push('Indirizzo: '+(U.startsWith('https://script.google.com/macros/s/')?'forma ok':'forma NON valida')+', '+(U.endsWith('/exec')?'finale /exec ok':'NON finisce con /exec')+', lunghezza '+U.length);L.push('Sessione: '+(ses?'presente':'assente'));p();
+ L.push('Versione pagina: '+VER);L.push('Indirizzo: '+(U.startsWith('https://script.google.com/macros/s/')?'forma ok':'forma NON valida')+', '+(U.endsWith('/exec')?'finale /exec ok':'NON finisce con /exec')+', lunghezza '+U.length);L.push('Sessione: '+(ses?'presente':'assente'));p();
  try{const r=await fetch(U+'?t='+Date.now());L.push('1 lettura diretta: HTTP '+r.status+' '+JSON.stringify(await r.json()))}catch(e){L.push('1 lettura diretta: ERRORE '+e.message)}p();
  try{await fetch(U+'?t='+Date.now(),{mode:'no-cors'});L.push('2 raggiungibile (senza lettura): sì')}catch(e){L.push('2 raggiungibile: NO ('+e.message+')')}p();
  try{L.push('3 metodo alternativo: '+JSON.stringify(await jsonp(U+'?t='+Date.now())))}catch(e){L.push('3 metodo alternativo: ERRORE '+e.message)}p();
@@ -211,7 +212,7 @@ $('dg').onclick=async()=>{const o=$('dgo'),U=CFG.SCRIPT_URL||'',L=[],p=()=>o.tex
   await t('6 riga come testo JSON (solo lettura)',U+'?session='+ses+'&action=list&row='+encodeURIComponent(JSON.stringify(R)));
   await t('7 riga a campi separati (solo lettura)',U+'?'+qs({session:ses,action:'list',row:R}))}
  L.push('Fine');p()};
-bioInit();lockIf();loadDay();bkUI();
+bioInit();lockIf();loadDay();
 
 // Andamento
 let per=30,selD=null,epTxt='',hid=new Set();
@@ -230,6 +231,7 @@ const jl=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){retu
 const epl=()=>jl(EPK,{});
 const epw=E=>{try{localStorage.setItem(EPK,JSON.stringify(E))}catch(e){$('st').textContent='Salvataggio locale non riuscito'}};
 const epAll=()=>{const m=jl(EPR,{}),L=epl(),X=jl(EPD,[]),o={};for(const k in m)if(!X.includes(k))o[k]=m[k];for(const k in L)o[k]=L[k].sent&&m[k]?m[k]:L[k];return o};
+const warnTxt=()=>{const w=jl('diario_warn',{});return(w.o?' · '+w.o+' righe del foglio senza data (ignorate)':'')+(w.d?' · '+w.d+' date duplicate nel foglio':'')};
 const stm=r=>{$('st').textContent=r=='ok'?'Condiviso':r=='dl'?'Condivisione non disponibile: file scaricato':'Condivisione annullata'};
 function download(name,txt){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'text/plain'}));a.download=name;a.click()}
 async function shareTxt(title,name,txt){try{const f=new File([txt],name,{type:'text/plain'});
@@ -282,7 +284,7 @@ Una riga per giorno. Leggi la legenda prima di analizzare.
 
 ## Regole
 - Campo vuoto = dato non registrato, non zero. Non includere i vuoti nelle medie.
-- Escludi la riga della data di esportazione (può essere parziale). Segnala i giorni mancanti e non interpolare.
+- Escludi la riga della data di esportazione (può essere parziale). Ignora le righe senza data; se una data è duplicata usa l'ultima e segnalalo. Segnala i giorni mancanti e non interpolare.
 - schermi_totali = pc_h + cellulare_h + tablet_h + tv_h; indice_sintomi = media di occhio_dx, occhio_sx, fotofobia, blefarite; la psoriasi si analizza a parte.
 
 ## Analisi richiesta
@@ -306,7 +308,14 @@ $('rf').onchange=async()=>{const f=$('rf').files[0];if(!f)return;let rows=[],eps
  const E=epl(),EA=epAll();Object.values(eps).forEach(e=>{if(e&&e.d&&!EA[e.d])E[e.d]={d:e.d,n:e.n||'',s:e.s||Date.now(),sent:false}});epw(E);
  $('rf').value='';loadDay();
  $('st').textContent=ch?'Ripristinati '+ch+' giorni da inviare ('+(rows.length-ch)+' erano già uguali)':'Niente da ripristinare: i dati coincidono con il backup';
- if(ch)sync()};
+ if(ch)sync().then(()=>{const w=jl('diario_warn',{});if(w.o||w.d)$('st').textContent+=' Attenzione: nel foglio ci sono '+(w.o?w.o+' righe senza data ':'')+(w.d?w.d+' date duplicate':'')+'. Usa "Controlla e ripara il foglio".'})};
+$('rp').onclick=async()=>{if(!ses){$('st').textContent='Accedi con Google per controllare il foglio';return}
+ if(!confirm('Controllo il foglio: le righe senza data o duplicate vengono spostate nella scheda "Da controllare" (non cancellate) e le righe vuote eliminate. Continuare?'))return;
+ $('st').textContent='Controllo del foglio…';
+ try{const j=await post({session:ses,action:'ripara'});
+  if(j.ok){$('st').textContent=(j.senzaData||j.duplicate||j.vuote)?'Foglio riparato: '+j.senzaData+' righe senza data e '+j.duplicate+' duplicate spostate in "Da controllare", '+j.vuote+' righe vuote eliminate':'Foglio in ordine: niente da riparare';await pull()}
+  else $('st').textContent='Rifiutato: '+j.error}
+ catch(e){$('st').textContent='Controllo non riuscito ('+e.message+'). Hai aggiornato Code.gs?'}};
 $('ai').onclick=async()=>{const E=epAll(),ks=Object.keys(E).sort();
  const t=LEGEND+'\n## Dati\nData di esportazione: '+today()+' (fuso Roma). La riga di questa data può essere parziale: escludila.\n\n'+csvText()+(ks.length?'\n\n## Episodi salvati (data e nota)\n'+ks.map(k=>k+': '+(E[k].n||'(senza nota)')).join('\n'):'')+'\n';
  stm(await shareTxt('Diario per AI','diario-per-ai-'+today()+'.txt',t))};
@@ -346,7 +355,7 @@ function draw(){
  const sw=l=>l[2]=='l'?`<svg width="18" height="8" aria-hidden="true"><line x1="0" x2="18" y1="4" y2="4" style="stroke:${l[1]}" stroke-width="2" stroke-dasharray="${l[3]||''}"/></svg>`:l[2]=='d'?`<i style="width:8px;height:8px;border-radius:50%;background:${l[1]}"></i>`:`<i style="width:10px;height:10px;border-radius:2px;background:${l[1]}"></i>`;
  const have=days.some(d=>R[d]),hn=hid.size;
  const mn=`<details id="mn" class="mn"${open?' open':''}><summary>Cosa mostrare${hn?' ('+hn+' nascosti)':''}</summary>${GR.map(([t,ks])=>`<h3>${t}</h3><div class="g2">${ks.map(([k,l])=>`<label class="c"><input type="checkbox" data-k="${k}"${on(k)?' checked':''}>${l}</label>`).join('')}</div>`).join('')}<div class="row"><button type="button" class="s" data-all="1">Mostra tutto</button></div></details>`;
- $('vAnd').innerHTML=`<div class="row pd">${[5,10,14,30,90,180].map(v=>`<button type="button" data-p="${v}" class="${v==per?'':'s'}">${v} gg</button>`).join('')}</div><div class="row"><button type="button" class="s" data-img="1">Salva i grafici come immagine</button></div><p class="k" style="font-weight:400;color:var(--mu);margin:8px 0 0">Giorni con dati: ${days.filter(d=>R[d]).length} su ${n}</p>`+mn+(have?'':'<p class="k">Nessun dato in questo periodo</p>')+(P.length?'':'<p class="k">Nessuna serie selezionata</p>')+P.map((p,k)=>`<div class="k">${p.t}${p.L.map(l=>`<button type="button" class="lg${on(l[4])?'':' off'}" data-k="${l[4]}" aria-pressed="${on(l[4])}">${sw(l)}${l[0]}</button>`).join('')}</div>${p.ok?`<svg class="sv" id="p${k}" viewBox="0 0 ${W} 108" role="img" aria-label="${p.a}"></svg>`:'<p class="k" style="font-weight:400;color:var(--mu);margin:6px 0">Tutte le voci sono nascoste: tocca una voce per riattivarla</p>'}`).join('')+'<svg class="sv" id="ax" viewBox="0 0 640 18" aria-hidden="true"></svg><div id="det"></div><details id="ep" class="mn ep"'+(epOpen?' open':'')+'><summary>Cosa è cambiato nei giorni prima</summary><div id="epb"></div></details><details id="el" class="mn ep"'+(elOpen?' open':'')+'><summary id="els">Episodi salvati</summary><div id="elb"></div></details>';
+ $('vAnd').innerHTML=`<div class="row pd">${[5,10,14,30,90,180].map(v=>`<button type="button" data-p="${v}" class="${v==per?'':'s'}">${v} gg</button>`).join('')}</div><div class="row"><button type="button" class="s" data-img="1">Salva i grafici come immagine</button></div><p class="k" style="font-weight:400;color:var(--mu);margin:8px 0 0">Giorni con dati: ${days.filter(d=>R[d]).length} su ${n}${warnTxt()}</p>`+mn+(have?'':'<p class="k">Nessun dato in questo periodo</p>')+(P.length?'':'<p class="k">Nessuna serie selezionata</p>')+P.map((p,k)=>`<div class="k">${p.t}${p.L.map(l=>`<button type="button" class="lg${on(l[4])?'':' off'}" data-k="${l[4]}" aria-pressed="${on(l[4])}">${sw(l)}${l[0]}</button>`).join('')}</div>${p.ok?`<svg class="sv" id="p${k}" viewBox="0 0 ${W} 108" role="img" aria-label="${p.a}"></svg>`:'<p class="k" style="font-weight:400;color:var(--mu);margin:6px 0">Tutte le voci sono nascoste: tocca una voce per riattivarla</p>'}`).join('')+'<svg class="sv" id="ax" viewBox="0 0 640 18" aria-hidden="true"></svg><div id="det"></div><details id="ep" class="mn ep"'+(epOpen?' open':'')+'><summary>Cosa è cambiato nei giorni prima</summary><div id="epb"></div></details><details id="el" class="mn ep"'+(elOpen?' open':'')+'><summary id="els">Episodi salvati</summary><div id="elb"></div></details>';
  P.forEach((p,k)=>{if(!p.ok)return;const T=6,B=100,a=v=>B-(B-T)*v/p.max;let s='';
   for(let v=0;v<=p.max+1e-9;v+=p.st)s+=`<line x1="${PL}" x2="${W-PR}" y1="${a(v)}" y2="${a(v)}" style="stroke:var(--ln)" stroke-width="0.5"/><text x="${PL-5}" y="${a(v)+4}" text-anchor="end" font-size="11" style="fill:var(--mu)">${Math.round(v*10)/10}</text>`;
   s+=`<rect class="hl" y="0" height="108" width="${bw}" style="fill:var(--tx)" opacity="0.07"/>`+p.d(a);
@@ -374,6 +383,8 @@ function draw(){
   const k=ga('data-k');if(k){hid.has(k)?hid.delete(k):hid.add(k);sv();draw();return}
   const i=ga('data-i');if(i!==null&&i!==undefined)sel(+i)};
  const idx=selD?days.indexOf(selD):-1;sel(idx>=0?idx:n-1);elr()}
+// Avvio: va in fondo, dopo la definizione di tutte le costanti
+bkUI();
 </script>
 </body>
 </html>
