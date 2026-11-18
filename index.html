@@ -72,7 +72,7 @@ nav{display:flex;gap:8px;margin-bottom:8px}nav button{flex:1}
 <script src="https://accounts.google.com/gsi/client" async onload="initG()"></script>
 <script>
 const $=id=>document.getElementById(id);
-const VER='2026-11-17c';
+const VER='2026-11-18a';
 // k: n numero, t testo, x testo lungo, s menu, b casella, r scala 0-N
 const UI=[
 ['Sonno',[['n','sonno_ore','Sonno (ore)'],['s','sonno_qualita','Qualità',['','scarsa','media','buona']]]],
@@ -308,14 +308,16 @@ $('rf').onchange=async()=>{const f=$('rf').files[0];if(!f)return;let rows=[],eps
  const E=epl(),EA=epAll();Object.values(eps).forEach(e=>{if(e&&e.d&&!EA[e.d])E[e.d]={d:e.d,n:e.n||'',s:e.s||Date.now(),sent:false}});epw(E);
  $('rf').value='';loadDay();
  $('st').textContent=ch?'Ripristinati '+ch+' giorni da inviare ('+(rows.length-ch)+' erano già uguali)':'Niente da ripristinare: i dati coincidono con il backup';
- if(ch)sync().then(()=>{const w=jl('diario_warn',{});if(w.o||w.d)$('st').textContent+=' Attenzione: nel foglio ci sono '+(w.o?w.o+' righe senza data ':'')+(w.d?w.d+' date duplicate':'')+'. Usa "Controlla e ripara il foglio".'})};
-$('rp').onclick=async()=>{if(!ses){$('st').textContent='Accedi con Google per controllare il foglio';return}
- if(!confirm('Controllo il foglio: le righe senza data o duplicate vengono spostate nella scheda "Da controllare" (non cancellate) e le righe vuote eliminate. Continuare?'))return;
+ const dopo=async()=>{const w=jl('diario_warn',{});if((w.o||w.d)&&confirm('Nel foglio ci sono '+(w.o?w.o+' righe senza data ':'')+(w.d?w.d+' date duplicate':'')+' dopo il ripristino. Le sposto nella scheda "Da controllare" (non vengono cancellate)?'))await riparaApp(false)};
+ if(ch)sync().then(dopo);else dopo()};
+async function riparaApp(ask){if(!ses){$('st').textContent='Accedi con Google per controllare il foglio';return}
+ if(ask&&!confirm('Controllo il foglio: le righe senza data o duplicate vengono spostate nella scheda "Da controllare" (non cancellate) e le righe vuote eliminate. Continuare?'))return;
  $('st').textContent='Controllo del foglio…';
  try{const j=await post({session:ses,action:'ripara'});
   if(j.ok){$('st').textContent=(j.senzaData||j.duplicate||j.vuote)?'Foglio riparato: '+j.senzaData+' righe senza data e '+j.duplicate+' duplicate spostate in "Da controllare", '+j.vuote+' righe vuote eliminate':'Foglio in ordine: niente da riparare';await pull()}
   else $('st').textContent='Rifiutato: '+j.error}
- catch(e){$('st').textContent='Controllo non riuscito ('+e.message+'). Hai aggiornato Code.gs?'}};
+ catch(e){$('st').textContent='Controllo non riuscito ('+e.message+'). Hai aggiornato Code.gs?'}}
+$('rp').onclick=()=>riparaApp(true);
 $('ai').onclick=async()=>{const E=epAll(),ks=Object.keys(E).sort();
  const t=LEGEND+'\n## Dati\nData di esportazione: '+today()+' (fuso Roma). La riga di questa data può essere parziale: escludila.\n\n'+csvText()+(ks.length?'\n\n## Episodi salvati (data e nota)\n'+ks.map(k=>k+': '+(E[k].n||'(senza nota)')).join('\n'):'')+'\n';
  stm(await shareTxt('Diario per AI','diario-per-ai-'+today()+'.txt',t))};
