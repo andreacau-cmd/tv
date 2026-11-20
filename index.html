@@ -41,6 +41,7 @@ nav{display:flex;gap:8px;margin-bottom:8px}nav button{flex:1}
 .seg button[data-c="0"]{--k:#2e9e5b;--kt:#0b1218}.seg button[data-c="1"]{--k:#8bc34a;--kt:#0b1218}.seg button[data-c="2"]{--k:#f2c230;--kt:#0b1218}
 .seg button[data-c="3"]{--k:#f28c28;--kt:#0b1218}.seg button[data-c="4"]{--k:#e5522b;--kt:#0b1218}.seg button[data-c="5"]{--k:#d32f2f;--kt:#fff}
 .seg button[aria-pressed=true]{background:var(--k);color:var(--kt);border-color:var(--tx);box-shadow:0 0 0 3px var(--tx);font-size:19px;font-weight:800}
+#upd{border:1px solid var(--ac);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:14px}#upd[hidden]{display:none}#upd button{margin-top:8px}
 .lg{width:auto;min-height:34px;padding:2px 10px;border:1px solid var(--ac);border-radius:17px;background:transparent;color:var(--tx);font-weight:400;font-size:12px;display:inline-flex;align-items:center;gap:6px}
 .lg.off{opacity:.5;border-color:var(--ln);text-decoration:line-through}
 .tb{width:100%;border-collapse:collapse;font-size:12px}.tb th,.tb td{padding:5px 6px;border-bottom:1px solid var(--ln);text-align:right;white-space:nowrap}.tb th:first-child,.tb td:first-child{text-align:left;white-space:normal}.tb td.hi{font-weight:700;color:var(--ac)}.tb th{color:var(--mu);font-weight:400}
@@ -57,7 +58,8 @@ nav{display:flex;gap:8px;margin-bottom:8px}nav button{flex:1}
 </head>
 <body>
 <main>
-<header><h1>Diario giornaliero</h1><div class="r"><span id="who">Non connesso</span><div id="gbtn"></div></div></header>
+<div id="upd" hidden><span id="updt"></span><button id="updb" type="button" class="s">Aggiorna ora</button></div>
+<header><h1>Diario giornaliero <small id="verl" style="font-size:12px;font-weight:400;color:var(--mu)"></small></h1><div class="r"><span id="who">Non connesso</span><div id="gbtn"></div></div></header>
 <button id="bio" class="s" type="button" hidden style="margin-bottom:8px"></button>
 <nav><button id="tI" type="button">Inserimento</button><button id="tA" type="button" class="s">Andamento</button></nav>
 <div id="vIns">
@@ -78,7 +80,7 @@ nav{display:flex;gap:8px;margin-bottom:8px}nav button{flex:1}
 <script src="https://accounts.google.com/gsi/client" async onload="initG()"></script>
 <script>
 const $=id=>document.getElementById(id);
-const VER='2026-11-19b';
+const VER='2026-11-20b';
 // k: n numero, t testo, x testo lungo, s menu, b casella, r scala 0-N
 const UI=[
 ['Sonno',[['n','sonno_ore','Sonno (ore)'],['s','sonno_qualita','Qualità',['','scarsa','media','buona']]]],
@@ -393,8 +395,12 @@ function draw(){
   const k=ga('data-k');if(k){hid.has(k)?hid.delete(k):hid.add(k);sv();draw();return}
   const i=ga('data-i');if(i!==null&&i!==undefined)sel(+i)};
  const idx=selD?days.indexOf(selD):-1;sel(idx>=0?idx:n-1);elr()}
+// Controllo versione: confronta questa pagina con quella pubblicata (richiesta che aggira le copie in cache)
+async function chkVer(){try{const r=await fetch(location.pathname+'?c='+Date.now(),{cache:'no-store'});if(!r.ok)return;const t=await r.text(),m=t.match(/const VER='([^']+)'/);if(m&&m[1]!==VER){$('updt').textContent='Stai usando la versione '+VER+' ma ne esiste una più recente ('+m[1]+').';$('upd').hidden=false}else $('upd').hidden=true}catch(e){}}
+$('updb').onclick=()=>{location.href=location.pathname+'?v='+Date.now()};
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)chkVer()});
 // Avvio: va in fondo, dopo la definizione di tutte le costanti
-bkUI();
+$('verl').textContent='v'+VER;bkUI();setTimeout(chkVer,1200);
 </script>
 </body>
 </html>
