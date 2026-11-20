@@ -35,6 +35,12 @@ footer>*{max-width:560px;margin:0 auto}#st{font-size:14px;color:var(--mu);min-he
 nav{display:flex;gap:8px;margin-bottom:8px}nav button{flex:1}
 .k{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;margin:16px 0 4px;font-size:14px;font-weight:600}
 .k span{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:400;color:var(--mu)}
+#form label.r,#form .seg{margin-right:max(16%,56px)}
+.seg{display:flex;gap:6px;margin-top:2px;margin-bottom:12px}
+.seg button{flex:1;width:auto;min-width:0;min-height:48px;padding:0;background:transparent;color:var(--tx);border:1px solid var(--ln);border-radius:8px;font-weight:600;font-size:16px;touch-action:manipulation;-webkit-tap-highlight-color:transparent;box-shadow:inset 0 -5px 0 var(--k)}
+.seg button[data-c="0"]{--k:#2e9e5b;--kt:#0b1218}.seg button[data-c="1"]{--k:#8bc34a;--kt:#0b1218}.seg button[data-c="2"]{--k:#f2c230;--kt:#0b1218}
+.seg button[data-c="3"]{--k:#f28c28;--kt:#0b1218}.seg button[data-c="4"]{--k:#e5522b;--kt:#0b1218}.seg button[data-c="5"]{--k:#d32f2f;--kt:#fff}
+.seg button[aria-pressed=true]{background:var(--k);color:var(--kt);border-color:var(--tx);box-shadow:0 0 0 3px var(--tx);font-size:19px;font-weight:800}
 .lg{width:auto;min-height:34px;padding:2px 10px;border:1px solid var(--ac);border-radius:17px;background:transparent;color:var(--tx);font-weight:400;font-size:12px;display:inline-flex;align-items:center;gap:6px}
 .lg.off{opacity:.5;border-color:var(--ln);text-decoration:line-through}
 .tb{width:100%;border-collapse:collapse;font-size:12px}.tb th,.tb td{padding:5px 6px;border-bottom:1px solid var(--ln);text-align:right;white-space:nowrap}.tb th:first-child,.tb td:first-child{text-align:left;white-space:normal}.tb td.hi{font-weight:700;color:var(--ac)}.tb th{color:var(--mu);font-weight:400}
@@ -72,7 +78,7 @@ nav{display:flex;gap:8px;margin-bottom:8px}nav button{flex:1}
 <script src="https://accounts.google.com/gsi/client" async onload="initG()"></script>
 <script>
 const $=id=>document.getElementById(id);
-const VER='2026-11-18a';
+const VER='2026-11-19b';
 // k: n numero, t testo, x testo lungo, s menu, b casella, r scala 0-N
 const UI=[
 ['Sonno',[['n','sonno_ore','Sonno (ore)'],['s','sonno_qualita','Qualità',['','scarsa','media','buona']]]],
@@ -88,8 +94,10 @@ $('form').innerHTML='<section><h2>Data</h2><input type="date" id="data"><small i
  if(k=='x')return`<label for="${id}">${l}</label><textarea id="${id}" rows="2"></textarea>`;
  if(k=='s')return`<label for="${id}">${l}</label><select id="${id}">${x.map(o=>`<option>${o}</option>`).join('')}</select>`;
  if(k=='b')return`<label class="c"><input id="${id}" type="checkbox">${l}</label>`;
- return`<label for="${id}" class="r"><span>${l} (0–${x})</span><b id="${id}_v">0</b></label><input id="${id}" type="range" min="0" max="${x}" step="1" value="0">`}).join('')+'</section>').join('');
-document.querySelectorAll('input[type=range]').forEach(r=>r.oninput=()=>$(r.id+'_v').textContent=r.value);
+ return`<label for="${id}" class="r"><span>${l} (0–${x})</span><b id="${id}_v">0</b></label><input id="${id}" type="range" min="0" max="${x}" step="1" value="0" hidden><div class="seg" data-sg="${id}" role="group" aria-label="${l}">${Array.from({length:x+1},(_,i)=>`<button type="button" data-v="${i}" data-c="${Math.round(i*5/x)}" aria-pressed="${i==0}">${i}</button>`).join('')}</div>`}).join('')+'</section>').join('');
+const segUp=r=>{const g=document.querySelector('[data-sg="'+r.id+'"]');if(g)g.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v==r.value)))};
+document.querySelectorAll('#form input[type=range]').forEach(r=>r.oninput=()=>{$(r.id+'_v').textContent=r.value;segUp(r)});
+$('form').addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-sg] button');if(!b)return;const r=$(b.parentNode.dataset.sg);r.value=b.dataset.v;r.dispatchEvent(new Event('input',{bubbles:true}))});
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome'}).format(new Date());
 $('data').value=today();
 ['tv_h','tablet_h','gocce_n','recugel','naviblef'].forEach(id=>$(id).value=0);
@@ -178,7 +186,7 @@ $('sync').onclick=sync;
 const rem=()=>{try{return JSON.parse(localStorage.getItem('diario_rem'))||{}}catch(e){return{}}};
 const all=()=>{const m=rem(),d=load();for(const k in d)if(!d[k].sent||!m[k])m[k]=d[k].row;return m};
 async function pull(){if(!ses)return;try{const j=await post({session:ses,action:'list'});
- if(j.ok){const m={};j.rows.forEach(x=>m[x.data]=x);localStorage.setItem('diario_rem',JSON.stringify(m));localStorage.setItem('diario_warn',JSON.stringify({o:j.orfane||0,d:j.dup||0}));if(!dirty)loadDay();if(!$('vAnd').hidden)draw()}
+ if(j.ok){const m={};j.rows.forEach(x=>m[x.data]=x);{const oR=jl('diario_rem',{});if(Object.keys(oR).length>=5&&Object.keys(m).length<Object.keys(oR).length*.5)localStorage.setItem('diario_rembak',JSON.stringify({...jl('diario_rembak',{}),...oR}))}localStorage.setItem('diario_rem',JSON.stringify(m));localStorage.setItem('diario_warn',JSON.stringify({o:j.orfane||0,d:j.dup||0}));if(!dirty)loadDay();if(!$('vAnd').hidden)draw()}
  else if(j.error=='sessione scaduta')endSes()}catch(e){}
  await epPush();try{const e=await post({session:ses,action:'ep_list'});if(e.ok){const m={};e.rows.forEach(x=>m[x.d]=x);localStorage.setItem(EPR,JSON.stringify(m));if(!$('vAnd').hidden)elr()}}catch(x){}}
 who();if(ses)sync();
@@ -231,7 +239,7 @@ const jl=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){retu
 const epl=()=>jl(EPK,{});
 const epw=E=>{try{localStorage.setItem(EPK,JSON.stringify(E))}catch(e){$('st').textContent='Salvataggio locale non riuscito'}};
 const epAll=()=>{const m=jl(EPR,{}),L=epl(),X=jl(EPD,[]),o={};for(const k in m)if(!X.includes(k))o[k]=m[k];for(const k in L)o[k]=L[k].sent&&m[k]?m[k]:L[k];return o};
-const warnTxt=()=>{const w=jl('diario_warn',{});return(w.o?' · '+w.o+' righe del foglio senza data (ignorate)':'')+(w.d?' · '+w.d+' date duplicate nel foglio':'')};
+const warnTxt=()=>{const w=jl('diario_warn',{}),bk=jl('diario_rembak',{}),rm=jl('diario_rem',{}),lc=load(),mis=Object.keys(bk).filter(k=>!rm[k]&&!lc[k]).length;return(mis?' · '+mis+' giorni visti prima non sono più nel foglio (copia conservata qui: fai un backup completo e ripristinalo)':'')+(w.o?' · '+w.o+' righe del foglio senza data (ignorate)':'')+(w.d?' · '+w.d+' date duplicate nel foglio':'')};
 const stm=r=>{$('st').textContent=r=='ok'?'Condiviso':r=='dl'?'Condivisione non disponibile: file scaricato':'Condivisione annullata'};
 function download(name,txt){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'text/plain'}));a.download=name;a.click()}
 async function shareTxt(title,name,txt){try{const f=new File([txt],name,{type:'text/plain'});
@@ -294,22 +302,22 @@ function parseCsv(t){t=t.replace(/^\ufeff/,'');const R=[];let r=[],c='',q=0;for(
  if(c!==''||r.length){r.push(c);R.push(r)}const h=R.shift()||[];return R.filter(x=>x.length>1).map(x=>Object.fromEntries(h.map((k,i)=>[k,x[i]])))}
 function bkUI(){const el=$('bks');if(!el)return;const t=localStorage.getItem('diario_lastbk'),n=t?Math.round((pd(today())-pd(t))/864e5):null;
  el.textContent='Backup ed esportazione ('+(n===null?'nessun backup fatto':n==0?'backup di oggi':n+' giorni dall’ultimo backup')+')'}
-$('bk').onclick=()=>{const o={app:'diario',schema:2,esportato:new Date().toISOString(),oggi:today(),giorni:all(),episodi:epAll()};download('diario-backup-'+today()+'.json',JSON.stringify(o));try{localStorage.setItem('diario_lastbk',today())}catch(e){}bkUI();$('st').textContent='Backup scaricato: conservalo anche fuori da Google'};
+$('bk').onclick=()=>{const o={app:'diario',schema:2,esportato:new Date().toISOString(),oggi:today(),giorni:{...jl('diario_rembak',{}),...all()},episodi:epAll()};download('diario-backup-'+today()+'.json',JSON.stringify(o));try{localStorage.setItem('diario_lastbk',today())}catch(e){}bkUI();$('st').textContent='Backup scaricato: conservalo anche fuori da Google'};
 $('rs').onclick=()=>$('rf').click();
 $('rf').onchange=async()=>{const f=$('rf').files[0];if(!f)return;let rows=[],eps={};
- try{const t=await f.text();if(t.trim().startsWith('{')){const o=JSON.parse(t);rows=Object.values(o.giorni||{});eps=o.episodi||{}}else rows=parseCsv(t)}catch(e){$('st').textContent='File non valido';$('rf').value='';return}
+ try{const t=await f.text();if(t.trim().startsWith('{')){const o=JSON.parse(t);rows=Object.values(o.giorni||{});eps=o.episodi||{}}else{rows=parseCsv(t);const hk=rows.length?Object.keys(rows[0]):[];if(hk.includes('salvato_il')){rows.forEach(r=>{if(/^\d{4}-\d{2}-\d{2}$/.test(r.data||''))eps[r.data]={d:r.data,n:r.nota||'',s:+r.salvato_il||Date.now()}});rows=[]}else if(!COLS.some(c=>c!='data'&&hk.includes(c)))throw new Error('colonne non riconosciute')}}catch(e){$('st').textContent='File non valido';$('rf').value='';return}
  rows=rows.filter(r=>/^\d{4}-\d{2}-\d{2}$/.test(r.data||''));
  if(!rows.length&&!Object.keys(eps).length){$('st').textContent='Nessun giorno trovato nel file';$('rf').value='';return}
- if(!confirm('Il file contiene '+rows.length+' giorni. Quelli diversi dai dati attuali verranno sostituiti con quelli del file. Continuare?')){$('rf').value='';return}
+ if(!confirm('Il file contiene '+rows.length+' giorni'+(Object.keys(eps).length?' e '+Object.keys(eps).length+' episodi':'')+'. Quelli diversi dai dati attuali verranno sostituiti con quelli del file. Continuare?')){$('rf').value='';return}
  $('st').textContent='Confronto con i dati attuali…';if(ses)await pull();
  const nm=o=>JSON.stringify(Object.keys(o).sort().map(k=>[k,String(o[k])])),cur=all(),d=load();let ch=0;
- rows.forEach(r=>{const x={};COLS.forEach(c=>{if(r[c]!==undefined&&r[c]!=='')x[c]=r[c]});const o=cur[r.data]?compact(cur[r.data]):null;if(o&&nm(o)==nm(x))return;d[r.data]={sent:false,row:x};ch++});
+ rows.forEach(r=>{const x={};COLS.forEach(c=>{if(r[c]!==undefined&&r[c]!=='')x[c]=r[c]});if(Object.keys(x).length<2)return;const o=cur[r.data]?compact(cur[r.data]):null;if(o&&nm(o)==nm(x))return;d[r.data]={sent:false,row:x};ch++});
  store(d);
- const E=epl(),EA=epAll();Object.values(eps).forEach(e=>{if(e&&e.d&&!EA[e.d])E[e.d]={d:e.d,n:e.n||'',s:e.s||Date.now(),sent:false}});epw(E);
+ const E=epl(),EA=epAll();let ne=0;Object.values(eps).forEach(e=>{if(e&&e.d&&!EA[e.d]){E[e.d]={d:e.d,n:e.n||'',s:e.s||Date.now(),sent:false};ne++}});epw(E);
  $('rf').value='';loadDay();
- $('st').textContent=ch?'Ripristinati '+ch+' giorni da inviare ('+(rows.length-ch)+' erano già uguali)':'Niente da ripristinare: i dati coincidono con il backup';
+ $('st').textContent=ch?'Ripristinati '+ch+' giorni da inviare ('+(rows.length-ch)+' erano già uguali)'+(ne?' e '+ne+' episodi':''):ne?'Importati '+ne+' episodi':'Niente da ripristinare: i dati coincidono con il backup';
  const dopo=async()=>{const w=jl('diario_warn',{});if((w.o||w.d)&&confirm('Nel foglio ci sono '+(w.o?w.o+' righe senza data ':'')+(w.d?w.d+' date duplicate':'')+' dopo il ripristino. Le sposto nella scheda "Da controllare" (non vengono cancellate)?'))await riparaApp(false)};
- if(ch)sync().then(dopo);else dopo()};
+ if(ch)sync().then(dopo);else{if(ne&&ses)epPush().then(pull);dopo()}};
 async function riparaApp(ask){if(!ses){$('st').textContent='Accedi con Google per controllare il foglio';return}
  if(ask&&!confirm('Controllo il foglio: le righe senza data o duplicate vengono spostate nella scheda "Da controllare" (non cancellate) e le righe vuote eliminate. Continuare?'))return;
  $('st').textContent='Controllo del foglio…';
